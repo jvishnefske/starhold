@@ -150,6 +150,7 @@ button,input,select{font:inherit;color:inherit}
 .update{position:fixed;left:50%;transform:translateX(-50%);top:max(10px, env(safe-area-inset-top));display:flex;align-items:center;gap:12px;white-space:nowrap;
   background:var(--panel-2);border:1px solid var(--signal);border-radius:4px;padding:5px 5px 5px 14px;font-size:13.5px;z-index:21;box-shadow:0 6px 20px rgba(0,0,0,.4)}
 svg text{font-family:var(--f-display)}
+svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;stroke-linejoin:round}   /* halo keeps name labels readable over lanes; troop counts stay crisp */
 .loc{cursor:pointer}
 @keyframes pulse{0%,100%{stroke-opacity:.35}50%{stroke-opacity:1}}
 .pulse{animation:pulse 1.4s ease-in-out infinite}
@@ -256,23 +257,26 @@ svg text{font-family:var(--f-display)}
 <script>
 // ---------- Board ----------
 const HOMES = [[70,70],[930,70],[930,730],[70,730]];
-// 4 corner planets (one per home station), then 4 edge planets (the only ones linked to the warp gate)
+// The ring is turned 45° to the homes so no lane crosses another: each home faces its warp planet on the diagonal,
+// flanked by the two shared planets on the axes. 4 shared planets first, then 4 warp planets (the only ones linked to the warp gate).
 const PL = [
-  ['Kessa',250,210],['Ilix',750,210],['Drel',750,590],['Senna',250,590],
-  ['Halcyon',500,120],['Brask',860,400],['Ume',500,680],['Zephra',140,400]
+  ['Kessa',140,400],['Ilix',500,110],['Drel',860,400],['Senna',500,690],
+  ['Halcyon',290,240],['Brask',710,240],['Ume',710,560],['Zephra',290,560]
 ];
 const LOCS = [
   ...HOMES.map((h,i)=>({name:'Home Station',home:i,x:h[0],y:h[1]})),
   ...PL.map(p=>({name:p[0],home:-1,x:p[1],y:p[2]}))
 ];
+// each home links to three consecutive ring planets: a shared planet, its warp planet, and the next shared planet clockwise
 const E = [['H0',0],['H1',1],['H2',2],['H3',3],
+  ['H0',4],['H0',1],['H1',5],['H1',2],['H2',6],['H2',3],['H3',7],['H3',0],
   [0,4],[4,1],[1,5],[5,2],[2,6],[6,3],[3,7],[7,0]];
 const ix = v => typeof v === 'string' ? +v[1] : v + 4;
 const EDGES = E.map(([a,b]) => [ix(a), ix(b)]);
 const ADJ = LOCS.map(() => []);
 EDGES.forEach(([a,b]) => { ADJ[a].push(b); ADJ[b].push(a); });
 const WARP = [4,5,6,7].map(p => p + 4);
-const COVER_2P = [1, 3, 1+4, 3+4];   // two-player games close the unused corners: home station and corner planet
+const COVER_2P = [1, 3, 1+4, 3+4];   // two-player games close the unused corners' home stations and the top and bottom shared planets
 const BOARD_ID = 'b8';
 
 const COLORS = ['#f4a259','#5ec2c6','#e5677d','#a58bf0'];
@@ -1215,7 +1219,11 @@ function renderBoard(){
       const dx = f(x + 24*g), dy = f(y + 20*g);
       s += `<circle cx="${dx}" cy="${dy}" r="${f(9*g)}" fill="#090c18" stroke="${S.players[S.drone[l]].color}" stroke-width="2"/><circle cx="${dx}" cy="${dy}" r="${f(3*g)}" fill="${S.players[S.drone[l]].color}"/>`;
     }
-    s += `<text x="${x}" y="${f(y + (big ? RING + 4 : R + 9) + nf*.75)}" text-anchor="middle" font-size="${nf}" letter-spacing="${lsName}" fill="#c9cde6">${L.name.toUpperCase()}</text></g>`;
+    // planets level with the gate get their name on the inward side, clear of the two home lanes arriving from above and below
+    const side = Math.abs(y - cy) < 1 ? (x < cx ? 1 : -1) : 0, gap = RING + 6;
+    s += side
+      ? `<text x="${f(x + side*gap)}" y="${f(y + nf*.35)}" text-anchor="${side > 0 ? 'start' : 'end'}" font-size="${nf}" letter-spacing="${lsName}" fill="#c9cde6">${L.name.toUpperCase()}</text></g>`
+      : `<text x="${x}" y="${f(y + (big ? RING + 4 : R + 9) + nf*.75)}" text-anchor="middle" font-size="${nf}" letter-spacing="${lsName}" fill="#c9cde6">${L.name.toUpperCase()}</text></g>`;
   });
   setHTML(GB.dyn, s);
 }

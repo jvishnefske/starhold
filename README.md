@@ -32,7 +32,7 @@ For a local test, run `python3 -m http.server 8000 -d docs` and open http://loca
 
 ## Board
 
-There are 8 planets. Each corner home station links to one corner planet. The corner planets and the 4 edge planets form a ring, and only the edge planets connect to the warp gate (1 crystal per jump). Two-player games close the two unused corners (home station and corner planet), leaving 6 planets; 5 outposts win.
+There are 8 planets in a ring around the warp gate, with a home station in each corner. Each home links to three neighbouring planets: its warp planet on the diagonal and the two shared planets on either side (You → Kessa, Halcyon, Ilix). Each shared planet sits between two homes. Only the four warp planets connect to the warp gate (1 crystal per jump). No lanes cross. Two-player games close the two unused home stations and the top and bottom shared planets, leaving 6 planets; 5 outposts win.
 
 ## Online play
 
