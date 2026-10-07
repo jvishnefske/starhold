@@ -1,0 +1,24 @@
+{
+  "name": "Starhold",
+  "short_name": "Starhold",
+  "description": "Space strategy for 2–4 commanders. Mine, recruit, battle and race to build outposts.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "any",
+  "background_color": "#090c18",
+  "theme_color": "#090c18",
+  "categories": ["games"],
+  "shortcuts": [
+    {"name": "Host online game", "short_name": "Host", "url": "./?new=host", "icons": [{"src": "icons/icon-192.png", "sizes": "192x192"}]},
+    {"name": "Join online game", "short_name": "Join", "url": "./?new=join", "icons": [{"src": "icons/icon-192.png", "sizes": "192x192"}]}
+  ],
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ]
+}
