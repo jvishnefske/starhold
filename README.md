@@ -6,22 +6,22 @@ A space strategy game for 2–4 commanders. It's an installable web app (PWA) wi
 
 | Path | What it is |
 |---|---|
-| `index.html` | The whole game: rules, computer players, UI, networking |
-| `vendor/peerjs.min.js` | PeerJS 1.5.4 (WebRTC wrapper), vendored so the app works offline |
-| `sw.js` | Service worker. Caches the app so it opens offline |
-| `manifest.webmanifest`, `icons/` | Install metadata and icons (including maskable and Apple touch) |
+| `docs/index.html` | The whole game: rules, computer players, UI, networking |
+| `docs/vendor/peerjs.min.js` | PeerJS 1.5.4 (WebRTC wrapper), vendored so the app works offline |
+| `docs/sw.js` | Service worker. Caches the app so it opens offline |
+| `docs/manifest.webmanifest`, `docs/icons/` | Install metadata and icons (including maskable and Apple touch) |
 
-There's no build step. Serve the folder as static files.
+There's no build step. Serve `docs/` as static files.
 
 ## Hosting
 
 Service workers and installing the app need **HTTPS**. Any static host works:
 
-- **GitHub Pages**: push this folder to a repo, then Settings → Pages → deploy from branch.
-- **Cloudflare Pages**: `npx wrangler pages deploy . --project-name starhold`
-- **Netlify**: drag the folder onto app.netlify.com/drop.
+- **GitHub Pages**: live at https://jvishnefske.github.io/starhold/, deployed from `main` → `/docs`.
+- **Cloudflare Pages**: `npx wrangler pages deploy docs --project-name starhold`
+- **Netlify**: drag the `docs` folder onto app.netlify.com/drop.
 
-For a local test, run `python3 -m http.server 8000` and open http://localhost:8000. `localhost` counts as secure on that machine only. Phones on your LAN need an HTTPS URL to install the app.
+For a local test, run `python3 -m http.server 8000 -d docs` and open http://localhost:8000. `localhost` counts as secure on that machine only. Phones on your LAN need an HTTPS URL to install the app.
 
 ## Installing
 
@@ -50,7 +50,7 @@ How it works:
 
 The public PeerJS server and relays are free but come with no guarantees. For a dependable setup:
 
-- Run your own broker with `npx peer --port 9000`. Set `PEER_OPTS` in `index.html` to `{host, port, path, secure: true}`.
+- Run your own broker with `npx peer --port 9000`. Set `PEER_OPTS` in `docs/index.html` to `{host, port, path, secure: true}`.
 - Add your own TURN server (e.g. coturn, or a hosted one) via `PEER_OPTS.config.iceServers`.
 
 ## Known limits
