@@ -2,6 +2,8 @@
 
 A space strategy game for 2–4 commanders. It's an installable web app (PWA) with peer-to-peer online play on Android, iOS and desktop.
 
+**Play:** https://jvishnefske.github.io/starhold/ · **Source:** https://github.com/jvishnefske/starhold
+
 ## Files
 
 | Path | What it is |
