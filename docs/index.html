@@ -125,6 +125,7 @@ button,input,select{font:inherit;color:inherit}
 .modal{position:fixed;inset:0;background:rgba(5,7,15,.72);display:flex;align-items:center;justify-content:center;
   padding:max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));z-index:10;overscroll-behavior:contain}
 .modal-box{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px;width:min(480px,100%);max-height:100%;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:14px}
+.modal-box > *{flex-shrink:0}
 .modal-box h2{margin:0;font-family:var(--f-display);letter-spacing:.1em;text-transform:uppercase;font-size:20px;text-wrap:balance}
 .modal.full{background:var(--void);z-index:12}
 .modal.full .modal-box{border-top:3px solid var(--pc, var(--signal));text-align:center;gap:18px;padding:28px 20px}
@@ -235,7 +236,7 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
           <section id="handsec"><p class="label" id="handlabel">Your cards</p><div class="hand" id="hand"></div></section>
           <section><p class="label">Ship's log</p><div class="log" id="log"></div></section>
           <details class="rules"><summary>How to play</summary><ul>
-            <li>Win by building <span class="tgt">4</span> outposts (5 with two players, 4 otherwise). Two-player games close two corners.</li>
+            <li>Win by building <span class="tgt">4</span> outposts (5 with two players, 4 otherwise). Two-player games close Ilix and Senna; troops pass straight through them.</li>
             <li>Start of turn: draw up to 2 cards. Then mine: each planet with 2+ of your troops yields 1 crystal or 1 ore.</li>
             <li>Spend 1 crystal per troop. New troops arrive at your home station.</li>
             <li>You get 2 movements. A movement sends any number of troops one lane. The warp gate costs 1 crystal and jumps between any two of the four edge planets.</li>
@@ -276,26 +277,62 @@ const EDGES = E.map(([a,b]) => [ix(a), ix(b)]);
 const ADJ = LOCS.map(() => []);
 EDGES.forEach(([a,b]) => { ADJ[a].push(b); ADJ[b].push(a); });
 const WARP = [4,5,6,7].map(p => p + 4);
-const COVER_2P = [1, 3, 1+4, 3+4];   // two-player games close the unused corners' home stations and the top and bottom shared planets
+// lanes in play: troops pass straight through a closed planet, so its open neighbours count as adjacent
+function adj(l){
+  const res = [...ADJ[l]];
+  ADJ[l].forEach(c => { if (S.covered[c]) ADJ[c].forEach(n => { if (n !== l && !S.covered[n] && !res.includes(n)) res.push(n); }); });
+  return res;
+}
+const COVER_2P = [1+4, 3+4];   // two-player games close the top and bottom shared planets (Ilix, Senna)
 const BOARD_ID = 'b8';
 
 const COLORS = ['#f4a259','#5ec2c6','#e5677d','#a58bf0'];
 const DEFAULT_NAMES = ['You','Vega','Orin','Lyra'];
 const AI_NAMES = ['Vega','Orin','Lyra','Castor'];
 
-const CARDS = {
-  drone: {name:'Guardian Drone', n:3, cost:'gem', target:'own', text:'Post a drone with your troops. The first roll they lose destroys the drone instead of a troop.'},
-  field: {name:'Force Field', n:2, cost:'gem', target:'own', text:'Shield a planet you hold. Rivals cannot move onto it or strike it until your next turn.'},
-  burn:  {name:'Afterburners', n:5, cost:null, target:null, text:'Take one extra movement this turn.'},
-  strike:{name:'Orbital Strike', n:4, cost:'troop', target:'enemy', text:'Remove up to 2 rival troops from a planet next to one you hold.'},
-  haul:  {name:'Ore Haul', n:5, cost:null, target:null, text:'Take 2 ore from the bank.'},
-  cache: {name:'Crystal Cache', n:4, cost:null, target:null, text:'Take 1 crystal from the bank.'},
-  pod:   {name:'Drop Pod', n:4, cost:'gem', target:'own', text:'Land 2 troops from your supply on a planet you hold.'},
-  sab:   {name:'Saboteur', n:3, cost:'troop', target:'opp', text:'A rival of your choice returns up to 2 ore to the bank.'},
-  plan:  {name:'Battle Plan', n:3, cost:null, target:null, text:'You win ties in your next battle this turn.'},
-  prefab:{name:'Prefab Kit', n:3, cost:null, target:null, text:'Your next outpost this turn costs 2 ore instead of 3.'},
+// Cards live in cards.json: {key: {name, copies, cost: {crystal, ore, troop}, effect: {op, ...}, text?}}.
+// Each op below says which planet or rival it targets and how its card text reads; text in the JSON overrides that.
+const RES = {crystal:'gems', ore:'ore'};          // JSON resource name -> player/bank field
+const BUILD_COST = 3;
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const resText = e => Object.keys(RES).filter(r => e[r]).map(r => r === 'ore' ? `${e[r]} ore` : plural(e[r], 'crystal')).join(' and ');
+const OPS = {
+  gain:          {target:null,    text:e => `Take ${resText(e)} from the bank.`},
+  moves:         {target:null,    text:e => e.n === 1 ? 'Take one extra movement this turn.' : `Take ${e.n} extra movements this turn.`},
+  winTies:       {target:null,    text:() => 'You win ties in your next battle this turn.'},
+  buildDiscount: {target:null,    text:e => `Your next outpost this turn costs ${Math.max(0, BUILD_COST - e.n)} ore instead of ${BUILD_COST}.`},
+  land:          {target:'own',   text:e => `Land ${plural(e.n, 'troop')} from your supply on a planet you hold.`},
+  drone:         {target:'own',   text:() => 'Post a drone with your troops. The first roll they lose destroys the drone instead of a troop.'},
+  shield:        {target:'own',   text:() => 'Shield a planet you hold. Rivals cannot move onto it or strike it until your next turn.'},
+  strike:        {target:'enemy', text:e => `Remove up to ${plural(e.n, 'rival troop')} from a planet next to one you hold.`},
+  sabotage:      {target:'opp',   text:e => `A rival of your choice returns up to ${resText(e)} to the bank.`},
 };
-const COST_LABEL = {gem:'Pay 1 crystal', troop:'Pay 1 troop from home', null:'Free'};
+const NEEDS = {gain:['crystal','ore'], moves:['n'], buildDiscount:['n'], land:['n'], strike:['n'], sabotage:['crystal','ore']};
+let CARDS = {};
+function loadCards(defs){
+  const out = {}, posInt = v => Number.isInteger(v) && v > 0;
+  for (const [key, d] of Object.entries(defs)){
+    const bad = msg => { throw new Error(`cards.json "${key}": ${msg}`); };
+    const e = d.effect || {}, op = OPS[e.op];
+    if (typeof d.name !== 'string') bad('needs a name');
+    if (!Number.isInteger(d.copies) || d.copies < 0) bad('copies must be a whole number');
+    if (!op) bad(`unknown effect op "${e.op}" (use ${Object.keys(OPS).join(', ')})`);
+    const need = NEEDS[e.op] || [];
+    if (need[0] === 'n' ? !posInt(e.n) : need.length && !need.some(r => posInt(e[r]))) bad(`effect ${e.op} needs ${need.join(' or ')} as a positive whole number`);
+    if (e.op === 'sabotage' && need.filter(r => e[r]).length > 1) bad('sabotage takes one resource');
+    const cost = {crystal:0, ore:0, troop:0};
+    for (const [k, v] of Object.entries(d.cost || {})){
+      if (!(k in cost)) bad(`unknown cost "${k}" (use crystal, ore, troop)`);
+      if (!Number.isInteger(v) || v < 0) bad(`cost ${k} must be a whole number`);
+      cost[k] = v;
+    }
+    const parts = [cost.crystal && plural(cost.crystal, 'crystal'), cost.ore && `${cost.ore} ore`, cost.troop && `${plural(cost.troop, 'troop')} from home`].filter(Boolean);
+    out[key] = {name:d.name, n:d.copies, cost, effect:e, target:op.target, costLabel: parts.length ? 'Pay ' + parts.join(' + ') : 'Free', text: d.text || op.text(e)};
+  }
+  return out;
+}
+const opOf = key => CARDS[key]?.effect.op;
+const sabRes = e => e.crystal ? 'crystal' : 'ore';   // the one resource a sabotage card takes
 
 // ---------- Storage ----------
 const LS = {
@@ -335,7 +372,7 @@ function makeState(cfg){
     bank: {gems: 31 - 2*np, ore: 31},
     dronesLeft: 3, fieldsLeft: 2,
     target: np === 2 ? 5 : 4,
-    cur: 0, phase: 'mine', movesLeft: 2, mined: [], fx: {plan:false, prefab:false},
+    cur: 0, phase: 'mine', movesLeft: 2, mined: [], fx: {plan:false, discount:0},
     log: [], winner: -1, turn: 1, battle: null, battleSeq: 0,
   };
   return st;
@@ -368,7 +405,7 @@ function startTurn(){
   const p = P();
   while (p.hand.length < 2 && (S.deck.length || S.discard.length)) p.hand.push(draw());
   S.shield.forEach((o,l) => { if (o === S.cur){ S.shield[l] = -1; S.fieldsLeft++; } });
-  S.phase = 'mine'; S.movesLeft = 2; S.mined = []; S.fx = {plan:false, prefab:false};
+  S.phase = 'mine'; S.movesLeft = 2; S.mined = []; S.fx = {plan:false, discount:0};
   if (!minable(S.cur).length) S.phase = 'main';
   render();
   if (p.ai && isAuthority()) runAI(++aiToken);
@@ -406,7 +443,7 @@ function tradeCards(i, j){
   log(`${pname(S.cur)} trades two cards for a troop.`);
 }
 
-function buildCost(){ return S.fx.prefab ? 2 : 3; }
+function buildCost(){ return Math.max(0, BUILD_COST - (S.fx.discount || 0)); }
 function canBuild(l, pid=S.cur){
   const p = P(pid);
   return LOCS[l].home < 0 && S.u[l].o === pid && S.u[l].n >= 3 && !hasBase(l,pid) && p.ore >= buildCost() && p.basesLeft > 0;
@@ -416,7 +453,7 @@ function build(l){
   ensureMain();
   const p = P(), c = buildCost();
   p.ore -= c; S.bank.ore += c; p.basesLeft--; S.bases[l].push(S.cur);
-  if (S.fx.prefab) S.fx.prefab = false;
+  S.fx.discount = 0;
   log(`${pname(S.cur)} builds an outpost on ${LOCS[l].name}.`);
   if (basesOf(S.cur) >= S.target){
     S.winner = S.cur; S.phase = 'over';
@@ -430,9 +467,9 @@ function canEnter(l, pid){
 }
 function dests(src, pid=S.cur){
   if (S.movesLeft <= 0 || !own(src,pid)) return [];
-  const res = ADJ[src].filter(l => canEnter(l,pid)).map(l => ({to:l, warp:false}));
+  const res = adj(src).filter(l => canEnter(l,pid)).map(l => ({to:l, warp:false}));
   if (WARP.includes(src) && P(pid).gems >= 1)
-    WARP.forEach(w => { if (w !== src && !ADJ[src].includes(w) && canEnter(w,pid)) res.push({to:w, warp:true}); });
+    WARP.forEach(w => { if (w !== src && !adj(src).includes(w) && canEnter(w,pid)) res.push({to:w, warp:true}); });
   return res;
 }
 
@@ -507,11 +544,11 @@ function cardTargets(key, pid=S.cur){
   const L = LOCS.map((_,l)=>l);
   if (t === 'own'){
     return L.filter(l => LOCS[l].home < 0 && own(l,pid) &&
-      (key !== 'drone' || S.drone[l] < 0) && (key !== 'field' || S.shield[l] < 0));
+      (opOf(key) !== 'drone' || S.drone[l] < 0) && (opOf(key) !== 'shield' || S.shield[l] < 0));
   }
   if (t === 'enemy'){
     return L.filter(l => LOCS[l].home < 0 && S.u[l].n > 0 && S.u[l].o !== pid &&
-      (S.shield[l] < 0 || S.shield[l] === pid) && ADJ[l].some(a => own(a,pid)));
+      (S.shield[l] < 0 || S.shield[l] === pid) && adj(l).some(a => own(a,pid)));
   }
   return [];
 }
@@ -519,43 +556,48 @@ function cardBlock(key, pid=S.cur){
   const c = CARDS[key], p = P(pid);
   if (!c) return 'Unknown';
   if (S.phase !== 'mine' && S.phase !== 'main') return 'Not now';
-  if (c.cost === 'gem' && p.gems < 1) return 'Needs 1 crystal';
-  if (c.cost === 'troop' && S.u[p.home].n < 1) return 'Needs a troop at home';
-  if (key === 'drone' && S.dronesLeft < 1) return 'No drones left';
-  if (key === 'field' && S.fieldsLeft < 1) return 'No fields left';
-  if (key === 'pod' && p.supply < 1) return 'Supply empty';
-  if (key === 'haul' && S.bank.ore < 1) return 'Bank out of ore';
-  if (key === 'cache' && S.bank.gems < 1) return 'Bank out of crystals';
+  const {crystal, ore, troop} = c.cost, e = c.effect;
+  if (p.gems < crystal) return `Needs ${plural(crystal, 'crystal')}`;
+  if (p.ore < ore) return `Needs ${ore} ore`;
+  if (S.u[p.home].n < troop) return troop === 1 ? 'Needs a troop at home' : `Needs ${troop} troops at home`;
+  if (e.op === 'drone' && S.dronesLeft < 1) return 'No drones left';
+  if (e.op === 'shield' && S.fieldsLeft < 1) return 'No fields left';
+  if (e.op === 'land' && p.supply < 1) return 'Supply empty';
+  if (e.op === 'gain' && !Object.keys(RES).some(r => e[r] && S.bank[RES[r]] > 0)) return e.ore && !e.crystal ? 'Bank out of ore' : e.crystal && !e.ore ? 'Bank out of crystals' : 'Bank is empty';
   if ((c.target === 'own' || c.target === 'enemy') && !cardTargets(key,pid).length) return 'No valid planet';
-  if (c.target === 'opp' && !S.players.some((q,i) => i !== pid && q.ore > 0)) return 'No rival has ore';
+  if (c.target === 'opp' && !S.players.some((q,i) => i !== pid && q[RES[sabRes(e)]] > 0)) return `No rival has ${sabRes(e) === 'ore' ? 'ore' : 'crystals'}`;
   return '';
 }
 function playCard(idx, target){
-  const pid = S.cur, p = P(), key = p.hand[idx], c = CARDS[key];
+  const pid = S.cur, p = P(), key = p.hand[idx], c = CARDS[key], e = c?.effect;
   if (cardBlock(key)) return;
   ensureMain();
-  if (c.cost === 'gem'){ p.gems--; S.bank.gems++; }
-  if (c.cost === 'troop'){ S.u[p.home].n--; p.supply++; }
+  p.gems -= c.cost.crystal; S.bank.gems += c.cost.crystal;
+  p.ore -= c.cost.ore; S.bank.ore += c.cost.ore;
+  S.u[p.home].n -= c.cost.troop; p.supply += c.cost.troop;
   p.hand.splice(idx,1); S.discard.push(key);
   let msg = `${pname(pid)} plays ${c.name}`;
-  switch (key){
+  switch (e.op){
     case 'drone': S.drone[target] = pid; S.dronesLeft--; msg += ` on ${LOCS[target].name}`; break;
-    case 'field': S.shield[target] = pid; S.fieldsLeft--; msg += ` on ${LOCS[target].name}`; break;
-    case 'burn': S.movesLeft++; break;
-    case 'haul': { const n = Math.min(2, S.bank.ore); S.bank.ore -= n; p.ore += n; break; }
-    case 'cache': S.bank.gems--; p.gems++; break;
-    case 'plan': S.fx.plan = true; break;
-    case 'prefab': S.fx.prefab = true; break;
-    case 'pod': { const n = Math.min(2, p.supply); p.supply -= n; S.u[target].n += n; msg += ` on ${LOCS[target].name}`; break; }
+    case 'shield': S.shield[target] = pid; S.fieldsLeft--; msg += ` on ${LOCS[target].name}`; break;
+    case 'moves': S.movesLeft += e.n; break;
+    case 'gain': for (const r in RES) if (e[r]){ const f = RES[r], n = Math.min(e[r], S.bank[f]); S.bank[f] -= n; p[f] += n; } break;
+    case 'winTies': S.fx.plan = true; break;
+    case 'buildDiscount': S.fx.discount = Math.max(S.fx.discount || 0, e.n); break;
+    case 'land': { const n = Math.min(e.n, p.supply); p.supply -= n; S.u[target].n += n; msg += ` on ${LOCS[target].name}`; break; }
     case 'strike': {
-      const u = S.u[target], q = S.players[u.o]; let hits = 2;
+      const u = S.u[target], q = S.players[u.o]; let hits = e.n;
       if (S.drone[target] === u.o){ S.drone[target] = -1; S.dronesLeft++; hits--; }
       const n = Math.min(hits, u.n); u.n -= n; q.supply += n;
       msg += ` on ${LOCS[target].name}, destroying ${n} troop${n===1?'':'s'}`;
       if (u.n === 0) u.o = -1;
       break;
     }
-    case 'sab': { const q = S.players[target], n = Math.min(2, q.ore); q.ore -= n; S.bank.ore += n; msg += ` against ${pname(target)} (−${n} ore)`; break; }
+    case 'sabotage': {
+      const r = sabRes(e), f = RES[r], q = S.players[target], n = Math.min(e[r], q[f]);
+      q[f] -= n; S.bank[f] += n; msg += ` against ${pname(target)} (−${r === 'ore' ? `${n} ore` : plural(n, 'crystal')})`;
+      break;
+    }
   }
   log(msg + '.');
 }
@@ -605,7 +647,7 @@ function distToGoal(src, pid){
   while (q.length){
     for (const l of q) if (LOCS[l].home < 0 && !hasBase(l,pid)) return d;
     const nq = [];
-    for (const l of q) for (const n of (WARP.includes(l) ? [...ADJ[l], ...WARP] : ADJ[l])) if (!seen.has(n) && canEnter(n,pid)){ seen.add(n); nq.push(n); }
+    for (const l of q) for (const n of (WARP.includes(l) ? [...adj(l), ...WARP] : adj(l))) if (!seen.has(n) && canEnter(n,pid)){ seen.add(n); nq.push(n); }
     q = nq; d++;
   }
   return 99;
@@ -642,33 +684,40 @@ function aiBestMove(){
   return best;
 }
 function aiPlay(key, target){ const i = P().hand.indexOf(key); if (i >= 0 && !cardBlock(key)) { playCard(i, target); return true; } return false; }
+const aiHand = op => P().hand.filter(k => opOf(k) === op);
+const aiPlayOp = (op, target) => aiHand(op).some(k => aiPlay(k, target));
 function aiCards(){
   const pid = S.cur, p = P();
-  aiPlay('haul'); aiPlay('cache');
-  if (p.hand.includes('pod') && p.gems >= 1){
-    const t = cardTargets('pod').filter(l => !hasBase(l,pid)).sort((a,b) => S.u[b].n - S.u[a].n)[0];
-    if (t != null) aiPlay('pod', t);
-  }
-  if (p.hand.includes('strike')){
-    const t = cardTargets('strike').sort((a,b) => S.u[b].n - S.u[a].n)[0];
-    if (t != null && S.u[p.home].n >= 1) aiPlay('strike', t);
-  }
-  if (p.hand.includes('sab')){
-    const rivals = S.players.map((q,i)=>({q,i})).filter(o => o.i !== pid && o.q.ore >= 2).sort((a,b)=>b.q.ore-a.q.ore);
-    if (rivals.length && S.u[p.home].n >= 1) aiPlay('sab', rivals[0].i);
-  }
-  if (p.hand.includes('drone') && p.gems >= 2){
-    const t = cardTargets('drone').sort((a,b) => S.u[b].n - S.u[a].n)[0];
-    if (t != null && S.u[t].n >= 3) aiPlay('drone', t);
-  }
-  if (p.hand.includes('field') && p.gems >= 2){
-    const t = cardTargets('field').find(l => ADJ[l].some(a => S.u[a].n >= S.u[l].n && S.u[a].o >= 0 && S.u[a].o !== pid));
-    if (t != null) aiPlay('field', t);
-  }
-  if (p.hand.includes('prefab') && p.ore === 2 && LOCS.some((_,l) => LOCS[l].home < 0 && own(l) && S.u[l].n >= 3 && !hasBase(l))) aiPlay('prefab');
+  const spare = k => p.gems >= CARDS[k].cost.crystal + 1;   // keep a crystal back for defensive cards
+  aiHand('gain').forEach(k => aiPlay(k));
+  aiHand('land').forEach(k => {
+    const t = cardTargets(k).filter(l => !hasBase(l,pid)).sort((a,b) => S.u[b].n - S.u[a].n)[0];
+    if (t != null) aiPlay(k, t);
+  });
+  aiHand('strike').forEach(k => {
+    const t = cardTargets(k).sort((a,b) => S.u[b].n - S.u[a].n)[0];
+    if (t != null) aiPlay(k, t);
+  });
+  aiHand('sabotage').forEach(k => {
+    const e = CARDS[k].effect, r = sabRes(e), f = RES[r];
+    const rivals = S.players.map((q,i)=>({q,i})).filter(o => o.i !== pid && o.q[f] >= Math.min(2, e[r])).sort((a,b)=>b.q[f]-a.q[f]);
+    if (rivals.length) aiPlay(k, rivals[0].i);
+  });
+  aiHand('drone').forEach(k => {
+    const t = cardTargets(k).sort((a,b) => S.u[b].n - S.u[a].n)[0];
+    if (spare(k) && t != null && S.u[t].n >= 3) aiPlay(k, t);
+  });
+  aiHand('shield').forEach(k => {
+    const t = cardTargets(k).find(l => adj(l).some(a => S.u[a].n >= S.u[l].n && S.u[a].o >= 0 && S.u[a].o !== pid));
+    if (spare(k) && t != null) aiPlay(k, t);
+  });
+  aiHand('buildDiscount').forEach(k => {
+    const cost = Math.max(0, BUILD_COST - CARDS[k].effect.n);
+    if (p.ore < buildCost() && p.ore >= cost && LOCS.some((_,l) => LOCS[l].home < 0 && own(l) && S.u[l].n >= 3 && !hasBase(l))) aiPlay(k);
+  });
 }
 function aiBuild(){ LOCS.forEach((_,l) => { if (S.phase !== 'over' && canBuild(l)) build(l); }); }
-function aiBuy(){ const p = P(); const keep = p.hand.some(k => CARDS[k].cost === 'gem') ? 1 : 0; while (p.gems > keep && buyTroop()); }
+function aiBuy(){ const p = P(); const keep = Math.max(0, ...p.hand.map(k => CARDS[k]?.cost.crystal || 0)); while (p.gems > keep && buyTroop()); }
 
 async function runAI(token){
   const pid = S.cur;
@@ -693,8 +742,8 @@ async function runAI(token){
   for (let guard=0; guard<8; guard++){
     const mv = aiBestMove();
     if (!mv) break;
-    if (S.movesLeft <= 0){ if (!aiPlay('burn')) break; }
-    if (mv.attack && p.hand.includes('plan')) aiPlay('plan');
+    if (S.movesLeft <= 0){ if (!aiPlayOp('moves')) break; }
+    if (mv.attack && !S.fx.plan) aiPlayOp('winTies');
     doMove(mv.src, mv.to, mv.k, mv.warp, true);
     if (!await step()) return;
   }
@@ -702,7 +751,7 @@ async function runAI(token){
   if (!alive()) { render(); return; }
   aiBuy();
   if (!await step(400)) return;
-  const junk = p.hand.findIndex(k => cardBlock(k) && k !== 'burn');
+  const junk = p.hand.findIndex(k => cardBlock(k) && opOf(k) !== 'moves');
   endTurn(junk >= 0 ? junk : null);
 }
 
@@ -1156,8 +1205,8 @@ function renderBoard(){
   let ln = '';
   WARP.forEach(w => { if (!S.covered[w]){ const [x,y] = pos(w); ln += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#b49cff" stroke-opacity=".28" stroke-width="${ww}" stroke-dasharray="3 7"/>`; } });
   EDGES.forEach(([a,b]) => {
-    const off = S.covered[a] || S.covered[b], [x1,y1] = pos(a), [x2,y2] = pos(b);
-    ln += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#7d88c0" stroke-opacity="${off?.12:.45}" stroke-width="${lw}"/>`;
+    const [x1,y1] = pos(a), [x2,y2] = pos(b);
+    ln += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#7d88c0" stroke-opacity=".45" stroke-width="${lw}"/>`;
   });
   setHTML(GB.lanes, ln);
 
@@ -1204,7 +1253,11 @@ function renderBoard(){
       return;
     }
     if (S.covered[l]){
-      s += `<g><circle cx="${x}" cy="${y}" r="${f(26*g)}" fill="#141830" stroke="#2c3358" stroke-dasharray="3 4"/>${cross}</g>`;
+      // closed planet: a waypoint troops pass through, never a stop
+      const wr = f(14*g), side = Math.abs(y - cy) < 1 ? (x < cx ? 1 : -1) : 0;
+      s += `<g><circle cx="${x}" cy="${y}" r="${wr}" fill="#141830" stroke="#4a5180" stroke-width="1.5" stroke-dasharray="3 4"/>` + (side
+        ? `<text x="${f(x + side*(wr + 10))}" y="${f(y + nf*.35)}" text-anchor="${side > 0 ? 'start' : 'end'}" font-size="${nf}" letter-spacing="${lsName}" fill="#4a5180">${L.name.toUpperCase()}</text></g>`
+        : `<text x="${x}" y="${f(below ? y + wr + 8 + nf*.75 : y - wr - 8)}" text-anchor="middle" font-size="${nf}" letter-spacing="${lsName}" fill="#4a5180">${L.name.toUpperCase()}</text></g>`);
       return;
     }
     s += `<g class="loc" data-loc="${l}">${hit}${ring}`;
@@ -1231,7 +1284,7 @@ function renderBoard(){
 function cardHTML(key, i, enabled, picked){
   const c = CARDS[key];
   if (!c) return '';
-  return `<button class="card${picked?' picked':''}" data-card="${i}" ${enabled?'':'disabled'}><span class="cost">${COST_LABEL[c.cost]}</span><h4>${c.name}</h4><p>${c.text}</p></button>`;
+  return `<button class="card${picked?' picked':''}" data-card="${i}" ${enabled?'':'disabled'}><span class="cost">${c.costLabel}</span><h4>${c.name}</h4><p>${c.text}</p></button>`;
 }
 
 function netbarHTML(){
@@ -1289,11 +1342,11 @@ function renderSide(){
     h += `<p class="hint">Pick 2 cards to trade for 1 troop at home (${ui.mode.picks.length}/2).</p><div class="row"><button class="btn" data-act="cancel">Cancel</button></div>`;
   } else if (ui.mode?.type === 'confirm'){
     const c = CARDS[ui.mode.key];
-    h += `<p class="hint"><b>${c.name}</b> · ${COST_LABEL[c.cost]}. ${c.text}</p><div class="row"><button class="btn primary" data-act="playcard">Play ${c.name}</button><button class="btn" data-act="cancel">Cancel</button></div>`;
+    h += `<p class="hint"><b>${c.name}</b> · ${c.costLabel}. ${c.text}</p><div class="row"><button class="btn primary" data-act="playcard">Play ${c.name}</button><button class="btn" data-act="cancel">Cancel</button></div>`;
   } else if (ui.mode?.type === 'card'){
     const c = CARDS[ui.mode.key];
     if (c.target === 'opp'){
-      h += `<p class="hint">${c.name}: choose a rival.</p><div class="row">${S.players.map((q,i)=> i===S.cur?'':`<button class="btn" data-opp="${i}" ${q.ore?'':'disabled'} style="border-color:${q.color}">${esc(q.name)} · ${q.ore} ore</button>`).join('')}<button class="btn" data-act="cancel">Cancel</button></div>`;
+      h += `<p class="hint">${c.name}: choose a rival.</p><div class="row">${S.players.map((q,i)=> { const r = sabRes(c.effect), v = q[RES[r]]; return i===S.cur?'':`<button class="btn" data-opp="${i}" ${v?'':'disabled'} style="border-color:${q.color}">${esc(q.name)} · ${v} ${r}</button>`; }).join('')}<button class="btn" data-act="cancel">Cancel</button></div>`;
     } else {
       h += `<p class="hint">${c.name}: tap a planet ringed in red.</p><div class="row"><button class="btn" data-act="cancel">Cancel</button></div>`;
     }
@@ -1405,7 +1458,7 @@ function openSetup(tab='local', code=''){
     const np = S && NET.mode === 'local' ? S.players.length : 4;
     body = `<label class="field">Commanders <select id="np" class="sel">${[2,3,4].map(n=>`<option ${n===np?'selected':''}>${n}</option>`).join('')}</select></label>
       <div id="setuprows" style="display:flex;flex-direction:column;gap:8px">${localRows(np, cur)}</div>
-      <p class="hint">Humans share this device and take turns. Two-player games close two corners and need 5 outposts.</p>
+      <p class="hint">Humans share this device and take turns. Two-player games close Ilix and Senna; troops pass straight through them. 5 outposts win.</p>
       <div class="row"><button class="btn primary" data-act="start">Launch</button></div>`;
   } else if (tab === 'host'){
     body = `<label class="field">Your name <input id="hname" maxlength="14" value="${esc(savedName())}" autocomplete="nickname"></label>
@@ -1681,7 +1734,7 @@ const shortcutTab = (() => {
   history.replaceState(null, '', location.pathname);
   return t;
 })();
-(function boot(){
+function boot(){
   let saved = LS.get('starhold.save');
   if (saved?.S && saved.S.board !== BOARD_ID) saved = null;   // saved on an older board layout
   const params = new URLSearchParams(location.search);
@@ -1724,8 +1777,15 @@ const shortcutTab = (() => {
     return;
   }
   newGame(DEFAULT_NAMES.map((n,i) => ({name:n, ai:i>0})));
-})();
-if (shortcutTab && NET.role !== 'client') openSetup(shortcutTab);
+}
+fetch('cards.json').then(r => r.json()).then(defs => {
+  CARDS = loadCards(defs);
+  boot();
+  if (shortcutTab && NET.role !== 'client') openSetup(shortcutTab);
+}).catch(err => {
+  document.body.insertAdjacentHTML('afterbegin', `<p style="padding:16px;color:#ff7a8a;font-family:monospace">Could not load cards: ${esc(err.message)}</p>`);
+  console.error(err);
+});
 </script>
 </body>
 </html>

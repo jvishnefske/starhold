@@ -1,0 +1,12 @@
+{
+  "drone":  { "name": "Guardian Drone", "copies": 3, "cost": { "crystal": 1 }, "effect": { "op": "drone" } },
+  "field":  { "name": "Force Field",    "copies": 2, "cost": { "crystal": 1 }, "effect": { "op": "shield" } },
+  "burn":   { "name": "Afterburners",   "copies": 5, "cost": {},               "effect": { "op": "moves", "n": 1 } },
+  "strike": { "name": "Orbital Strike", "copies": 4, "cost": { "troop": 1 },   "effect": { "op": "strike", "n": 2 } },
+  "haul":   { "name": "Ore Haul",       "copies": 5, "cost": {},               "effect": { "op": "gain", "ore": 2 } },
+  "cache":  { "name": "Crystal Cache",  "copies": 4, "cost": {},               "effect": { "op": "gain", "crystal": 1 } },
+  "pod":    { "name": "Drop Pod",       "copies": 4, "cost": { "crystal": 1 }, "effect": { "op": "land", "n": 2 } },
+  "sab":    { "name": "Saboteur",       "copies": 3, "cost": { "troop": 1 },   "effect": { "op": "sabotage", "ore": 2 } },
+  "plan":   { "name": "Battle Plan",    "copies": 3, "cost": {},               "effect": { "op": "winTies" } },
+  "prefab": { "name": "Prefab Kit",     "copies": 3, "cost": {},               "effect": { "op": "buildDiscount", "n": 1 } }
+}

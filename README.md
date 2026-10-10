@@ -9,6 +9,7 @@ A space strategy game for 2–4 commanders. It's an installable web app (PWA) wi
 | Path | What it is |
 |---|---|
 | `docs/index.html` | The whole game: rules, computer players, UI, networking |
+| `docs/cards.json` | The deck: each card's name, copies, cost and effect |
 | `docs/vendor/peerjs.min.js` | PeerJS 1.5.4 (WebRTC wrapper), vendored so the app works offline |
 | `docs/sw.js` | Service worker. Caches the app so it opens offline |
 | `docs/manifest.webmanifest`, `docs/icons/` | Install metadata and icons (including maskable and Apple touch) |
@@ -32,7 +33,25 @@ For a local test, run `python3 -m http.server 8000 -d docs` and open http://loca
 
 ## Board
 
-There are 8 planets in a ring around the warp gate, with a home station in each corner. Each home links to three neighbouring planets: its warp planet on the diagonal and the two shared planets on either side (You → Kessa, Halcyon, Ilix). Each shared planet sits between two homes. Only the four warp planets connect to the warp gate (1 crystal per jump). No lanes cross. Two-player games close the two unused home stations and the top and bottom shared planets, leaving 6 planets; 5 outposts win.
+There are 8 planets in a ring around the warp gate, with a home station in each corner. Each home links to three neighbouring planets: its warp planet on the diagonal and the two shared planets on either side (You → Kessa, Halcyon, Ilix). Each shared planet sits between two homes. Only the four warp planets connect to the warp gate (1 crystal per jump). No lanes cross. Two-player games close Ilix and Senna, leaving 6 planets; troops pass straight through a closed planet, so Halcyon–Brask and Zephra–Ume become ordinary lanes. 5 outposts win.
+
+## Cards
+
+`docs/cards.json` defines the deck. Each card has a `name`, a number of `copies`, a `cost` (any of `crystal`, `ore`, `troop`; troops come from your home station) and one `effect`:
+
+| `op` | Fields | Does |
+|---|---|---|
+| `gain` | `crystal` and/or `ore` | Take that much from the bank |
+| `moves` | `n` | Extra movements this turn |
+| `winTies` | | Win ties in your next battle this turn |
+| `buildDiscount` | `n` | Next outpost this turn costs `n` less ore |
+| `land` | `n` | Put `n` troops from your supply on a planet you hold |
+| `drone` | | Post a drone that absorbs one lost roll |
+| `shield` | | Rivals can't enter or strike a planet until your next turn |
+| `strike` | `n` | Remove up to `n` rival troops next to a planet you hold |
+| `sabotage` | `crystal` or `ore` | A rival returns that much to the bank |
+
+The card text is written from the effect, so changing a number updates the text too. Add `"text"` to a card to override it. A mistake in the file shows an error naming the card when the game loads. Bump `VERSION` in `docs/sw.js` after editing so installed copies update.
 
 ## Online play
 

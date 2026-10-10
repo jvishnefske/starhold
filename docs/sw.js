@@ -1,7 +1,7 @@
 // Starhold service worker: app shell works offline; peer-to-peer traffic is never touched.
-const VERSION = 'starhold-v5';
+const VERSION = 'starhold-v6';
 const FONTS = 'starhold-fonts';   // fonts never change, so this cache outlives app versions
-const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'vendor/peerjs.min.js',
+const SHELL = ['./', 'index.html', 'cards.json', 'manifest.webmanifest', 'vendor/peerjs.min.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
