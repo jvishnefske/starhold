@@ -229,7 +229,7 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
 </head>
 <body>
 <div class="app">
-  <div class="boardwrap"><svg id="board" viewBox="0 0 1000 800" role="img" aria-label="Star chart game board"><g id="g-bg"></g><g id="g-lanes"></g><g id="g-gate"></g><g id="g-dyn"></g></svg></div>
+  <div class="boardwrap"><svg id="board" viewBox="0 0 880 800" role="img" aria-label="Star chart game board"><g id="g-bg"></g><g id="g-lanes"></g><g id="g-gate"></g><g id="g-dyn"></g></svg></div>
   <aside class="panel">
     <div class="panel-head">
       <div class="brand">Starhold<small>Sector conquest · 2–4 commanders</small></div>
@@ -249,7 +249,7 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
           <section><p class="label">Ship's log</p><div class="log" id="log"></div></section>
           <details class="rules"><summary>How to play</summary><ul>
             <li>Win by building <span class="tgt">4</span> outposts (5 with two players, 4 otherwise). Two-player games close Ilix and Senna; troops pass straight through them.</li>
-            <li>Start of turn: draw up to 2 cards. Each planet with 2+ of your troops mines automatically: ore until you have 3, then crystal.</li>
+            <li>Start of turn: draw up to 2 cards. Each planet with 2+ of your troops mines automatically: ore until you have 3, then crystal. Tap Mine to switch to all ore or all crystal.</li>
             <li>Spend 1 crystal per troop. New troops arrive at your home station.</li>
             <li>You get 2 movements. A movement sends any number of troops one lane. The warp gate costs 1 crystal and jumps between any two of the four edge planets.</li>
             <li>Troops never enter a home station, including their own.</li>
@@ -269,12 +269,14 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
 <script src="vendor/peerjs.min.js"></script>
 <script>
 // ---------- Board ----------
-const HOMES = [[70,70],[930,70],[930,730],[70,730]];
+// The chart is 880×800 (landscape) so the graph is close to square: homes sit 740 apart across and 660 down.
+const BW = 880, BH = 800;
+const HOMES = [[70,70],[810,70],[810,730],[70,730]];
 // The ring is turned 45° to the homes so no lane crosses another: each home faces its warp planet on the diagonal,
 // flanked by the two shared planets on the axes. 4 shared planets first, then 4 warp planets (the only ones linked to the warp gate).
 const PL = [
-  ['Kessa',140,400],['Ilix',500,110],['Drel',860,400],['Senna',500,690],
-  ['Halcyon',290,240],['Brask',710,240],['Ume',710,560],['Zephra',290,560]
+  ['Kessa',130,400],['Ilix',440,110],['Drel',750,400],['Senna',440,690],
+  ['Halcyon',259,240],['Brask',621,240],['Ume',621,560],['Zephra',259,560]
 ];
 const LOCS = [
   ...HOMES.map((h,i)=>({name:'Home Station',home:i,x:h[0],y:h[1]})),
@@ -427,19 +429,42 @@ function startTurn(){
 function ensureMain(){ if (S.phase === 'mine') S.phase = 'main'; }   // games saved mid-mining by older versions
 
 // Mining needs no input: at the start of your turn every planet holding 2+ of your troops yields one resource.
-// It is ore while you are short of an outpost, crystal after that; if the bank is out of one, you get the other.
+// Each commander's mining choice (p.mine) decides which: 'auto' is ore while you are short of an outpost and crystal
+// after that, 'ore' and 'gems' are always that. If the bank is out of one, you get the other.
+const MINE_CYCLE = ['auto', 'ore', 'gems'];   // one tap moves to the next
+const MINE_ICON = {auto:'🪨→💎', ore:'🪨', gems:'💎'};
+const minePref = p => MINE_CYCLE.includes(p.mine) ? p.mine : 'auto';
 const minedText = g => [g.ore && `${g.ore} ore`, g.gems && plural(g.gems, 'crystal')].filter(Boolean).join(' and ');
+const minedIcons = g => [g.ore && `🪨${g.ore}`, g.gems && `💎${g.gems}`].filter(Boolean).join(' ');
+function mineKind(p, oreNow){
+  const pref = minePref(p);
+  return pref === 'auto' ? (oreNow < BUILD_COST && p.basesLeft > 0 ? 'ore' : 'gems') : pref;
+}
 function autoMine(){
   const p = P(), got = {gems:0, ore:0};
   LOCS.forEach((L, l) => {
     if (L.home >= 0 || S.u[l].o !== S.cur || S.u[l].n < 2) return;
-    let kind = p.ore < BUILD_COST && p.basesLeft > 0 ? 'ore' : 'gems';
+    let kind = mineKind(p, p.ore);
     if (S.bank[kind] <= 0) kind = kind === 'ore' ? 'gems' : 'ore';
     if (S.bank[kind] <= 0) return;
     S.bank[kind]--; p[kind]++; got[kind]++;
   });
   S.mined = got;
   if (got.gems || got.ore) log(`${pname(S.cur)} ${sv(S.cur,'mines')} ${minedText(got)}.`);
+}
+// Changing the choice also redoes this turn's yield, as far as you still hold what was mined, so it never creates anything.
+function setMinePref(pref){
+  const p = P(); p.mine = pref;
+  const m = S.mined && S.mined.ore != null ? S.mined : null;
+  if (!m || !(m.ore + m.gems)) return;
+  let ore = p.ore - m.ore, want = 0;   // replay the mining from the ore held before it
+  for (let i = 0; i < m.ore + m.gems; i++) if (mineKind(p, ore + want) === 'ore') want++;
+  let d = want - m.ore;   // > 0 trades mined crystal for ore, < 0 the reverse
+  d = d > 0 ? Math.min(d, p.gems, S.bank.ore) : -Math.min(-d, p.ore, S.bank.gems);
+  if (!d) return;
+  p.gems -= d; S.bank.gems += d; p.ore += d; S.bank.ore -= d;
+  m.ore += d; m.gems -= d;
+  log(`${pname(S.cur)} ${sv(S.cur,'mines')} ${minedText(m)} instead.`);
 }
 
 function buyTroop(){
@@ -642,6 +667,7 @@ function apply(type, a){
   const LMAX = LOCS.length - 1;
   switch (type){
     case 'buy': buyTroop(); break;
+    case 'minepref': if (MINE_CYCLE.includes(a[0])) setMinePref(a[0]); break;
     case 'trade': if (int(a[0],0,p.hand.length-1) && int(a[1],0,p.hand.length-1) && a[0] !== a[1]) tradeCards(a[0], a[1]); break;
     case 'build': if (int(a[0],0,LMAX)) build(a[0]); break;
     case 'card': {
@@ -1086,7 +1112,7 @@ const STAR_PTS = (() => { const a = []; let seed = 7; const r = () => (seed = (s
 const BG_HTML = {};
 function bgHTML(port){
   if (BG_HTML[port]) return BG_HTML[port];
-  const W = port ? 800 : 1000, H = port ? 1000 : 800;
+  const W = port ? BH : BW, H = port ? BW : BH;
   const stars = STAR_PTS.map(([x,y,r,o]) => `<circle cx="${port?y:x}" cy="${port?x:y}" r="${r}" fill="#cfd6ff" opacity="${o}"/>`).join('');
   return BG_HTML[port] = `<defs>
     <radialGradient id="neb1" cx="30%" cy="35%" r="55%"><stop offset="0" stop-color="#3a2c6b" stop-opacity=".45"/><stop offset="1" stop-color="#090c18" stop-opacity="0"/></radialGradient>
@@ -1102,13 +1128,13 @@ function gateHTML(cx, cy){
 }
 function hexPts(x,y,r){ return [...Array(6)].map((_,i)=>{const a=Math.PI/3*i+Math.PI/6;return `${(x+r*Math.cos(a)).toFixed(1)},${(y+r*Math.sin(a)).toFixed(1)}`;}).join(' '); }
 
-// Board view: tall phones get a transposed 800×1000 chart; k scales text so labels stay readable on small screens.
+// Board view: tall phones get a transposed 800×880 chart; k scales text so labels stay readable on small screens.
 // Orientation follows the window, not the board area, so the chart never flips mid-move when the dock grows or shrinks.
 let BV = {port:false, k:1};
 function measureBoard(){
   const w = boardwrap.clientWidth, h = boardwrap.clientHeight;
   const port = sheetMQ.matches && innerHeight > innerWidth * 1.5;
-  const VW = port ? 800 : 1000, VH = port ? 1000 : 800;
+  const VW = port ? BH : BW, VH = port ? BW : BH;
   const k = w && h ? Math.min(4, Math.max(1, Math.max(VW/w, VH/h))) : 1;
   return {port, k};
 }
@@ -1217,8 +1243,8 @@ sheetMQ.addEventListener?.('change', () => render());
 function renderBoard(){
   BV = measureBoard();
   const {port, k} = BV, g = Math.min(k, 1.6), big = k > 1.2;
-  const VW = port ? 800 : 1000, VH = port ? 1000 : 800;
-  const [cx, cy] = port ? [400, 500] : [500, 400];
+  const VW = port ? BH : BW, VH = port ? BW : BH;
+  const [cx, cy] = [VW/2, VH/2];   // the warp gate sits in the middle
   const pos = l => port ? [LOCS[l].y, LOCS[l].x] : [LOCS[l].x, LOCS[l].y];
   const f = n => +n.toFixed(1);
   const vb = `0 0 ${VW} ${VH}`;
@@ -1251,7 +1277,7 @@ function renderBoard(){
   LOCS.forEach((L, l) => {
     const u = S.u[l], [x, y] = pos(l), below = y < VH/2;
     const oc = u.n > 0 ? S.players[u.o].color : null;
-    const hit = `<circle cx="${x}" cy="${y}" r="95" fill="#000" fill-opacity="0"/>`; // generous touch target; nearest neighbours are ~214 apart
+    const hit = `<circle cx="${x}" cy="${y}" r="95" fill="#000" fill-opacity="0"/>`; // generous touch target; nearest neighbours are ~205 apart
     let ring = '';
     if (sel === l) ring = `<circle cx="${x}" cy="${y}" r="${f((L.home>=0?44:38)*g)}" fill="none" stroke="#fff" stroke-width="2.5"/>`;
     const dd = dset.find(d => d.to === l);
@@ -1347,7 +1373,7 @@ function renderSide(){
     const tag = q.dropped ? 'offline · computer' : q.ai ? 'computer' : i === meIdx ? 'you' : NET.mode === 'net' ? 'online' : 'human';
     st += `<div class="pl${i===S.cur?' cur':''}" style="--pc:${q.color}"><span class="sw"></span>
       <div><div class="nm">${esc(q.name)}<em>${tag}</em></div>
-      <div class="stats"><span>◆ <b>${q.gems}</b><i> crystal</i></span><span>▲ <b>${q.ore}</b><i> ore</i></span><span class="x"><b>${troopsOf(i)}</b> troops</span><span class="x"><b>${q.hand.length}</b> cards</span></div></div>
+      <div class="stats"><span>💎 <b>${q.gems}</b><i> crystal</i></span><span>🪨 <b>${q.ore}</b><i> ore</i></span><span class="x"><b>${troopsOf(i)}</b> troops</span><span class="x"><b>${q.hand.length}</b> cards</span></div></div>
       <div class="outposts" title="${b} of ${S.target} outposts">${[...Array(S.target)].map((_,k)=>`<i class="${k<b?'on':''}"></i>`).join('')}</div></div>`;
   });
   st += `</div></section>`;
@@ -1383,7 +1409,7 @@ function renderSide(){
       + (S.drone[from] === S.cur ? ` <button class="chip" data-act="drone">Drone ${ui.pm.drone ? 'goes' : 'stays'}</button>` : '');
     acts = countChoices(n).map(k => `<button class="btn${k === n ? ' primary' : ''}" data-count="${k}">${k === n ? `All ${n}` : k}</button>`).join('') + x;
   } else {
-    const l = ui.sel, got = S.mined && (S.mined.gems || S.mined.ore) ? `Mined ${minedText(S.mined)}. ` : '';
+    const l = ui.sel, got = S.mined && (S.mined.gems || S.mined.ore) ? `Mined ${minedIcons(S.mined)}. ` : '';
     if (l != null){
       const L = LOCS[l], u = S.u[l];
       hint = `<b>${L.home >= 0 ? 'Home Station' : L.name}</b> · ${u.n > 0 ? `${plural(u.n, 'troop')} (${esc(S.players[u.o].name)})` : 'empty'}`
@@ -1391,9 +1417,12 @@ function renderSide(){
         + (own(l) && dests(l).length ? '. Tap a ringed planet to move; violet rings use the warp gate.' : own(l) && S.movesLeft <= 0 ? '. No moves left this turn.' : '.');
     } else hint = `${NET.mode === 'net' ? 'Your turn. ' : ''}Tap one of your planets to move troops.`;
     hint = got + hint;
+    const mp = minePref(p), next = MINE_CYCLE[(MINE_CYCLE.indexOf(mp) + 1) % MINE_CYCLE.length];
+    const mineSay = {auto:'ore until you have 3, then crystal', ore:'ore', gems:'crystal'};
+    acts += `<button class="btn" data-act="minepref" data-pref="${next}" aria-label="Mining: ${mineSay[mp]}. Tap to mine ${mineSay[next]}">Mine ${MINE_ICON[mp]}</button>`;
     const bl = l != null && canBuild(l) ? l : LOCS.findIndex((_,i) => canBuild(i));
-    if (bl >= 0) acts += `<button class="btn primary" data-build="${bl}" aria-label="Build an outpost on ${LOCS[bl].name} for ${buildCost()} ore">Build ${LOCS[bl].name} ▲${buildCost()}</button>`;
-    acts += `<button class="btn" data-act="buy" aria-label="Recruit a troop for 1 crystal" ${p.gems>=1&&p.supply>=1?'':'disabled'}>Recruit ◆1</button>`;
+    if (bl >= 0) acts += `<button class="btn primary" data-build="${bl}" aria-label="Build an outpost on ${LOCS[bl].name} for ${buildCost()} ore">Build ${LOCS[bl].name} 🪨${buildCost()}</button>`;
+    acts += `<button class="btn" data-act="buy" aria-label="Recruit a troop for 1 crystal" ${p.gems>=1&&p.supply>=1?'':'disabled'}>Recruit 💎1</button>`;
     acts += `<button class="btn" data-act="trade" ${p.hand.length>=2&&p.supply>=1?'':'disabled'}>Trade cards → troop</button>`;
     acts += `<button class="btn${bl >= 0 ? '' : ' primary'}" data-act="end">End turn</button>`;
   }
@@ -1688,6 +1717,7 @@ document.addEventListener('click', e => {
   switch (act_){
     case 'cancel': ui.mode = null; ui.pm = null; break;
     case 'buy': act('buy'); return;
+    case 'minepref': act('minepref', t.dataset.pref); return;
     case 'trade': act('trade', 0, 1); return;   // hands top out at 2 cards, so a trade is the whole hand
     case 'end': ui.mode = null; act('end', null); return;
     case 'swap': { const m = ui.mode; ui.mode = null; act('end', m ? m.idx : null); return; }   // discard this card, draw a new one, end the turn
