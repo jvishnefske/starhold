@@ -80,6 +80,8 @@ button,input,select{font:inherit;color:inherit}
 .hint{color:var(--mute);font-size:13.5px;margin:0}
 .err{color:var(--danger)}
 .row{display:flex;flex-wrap:wrap;gap:8px}
+.ctx .actions{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}   /* one row of actions in every layout */
+.ctx .actions .btn{padding:6px;font-size:13px;line-height:1.2}
 .btn{background:transparent;border:1px solid var(--line);border-radius:3px;padding:8px 12px;cursor:pointer;font-size:13.5px;font-weight:500;min-height:44px;
   transition:transform 80ms ease, background-color 80ms ease}
 .btn:disabled{opacity:.4;cursor:not-allowed}
@@ -111,6 +113,7 @@ button,input,select{font:inherit;color:inherit}
 .toggle input:focus-visible + .knob{outline:2px solid var(--signal);outline-offset:2px}
 .confirm{border:1px solid var(--danger);border-radius:4px;padding:10px;display:flex;flex-direction:column;gap:8px}
 .confirm .hint{color:var(--ink)}
+.chip{background:transparent;border:1px solid var(--line);border-radius:12px;padding:2px 9px;min-height:26px;font-size:12px;color:var(--ink);cursor:pointer;vertical-align:middle}
 .hand{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .card{text-align:left;background:linear-gradient(160deg,#1d2443,#141a31);border:1px solid var(--line);border-radius:5px;padding:9px 10px;cursor:pointer;display:flex;flex-direction:column;gap:4px;min-height:112px;transition:transform 80ms ease}
 .card:disabled{cursor:default;opacity:.55}
@@ -140,6 +143,8 @@ button,input,select{font:inherit;color:inherit}
 .rounds{display:flex;flex-direction:column;gap:5px;max-height:300px;overflow-y:auto;overscroll-behavior:contain}
 .round{display:grid;grid-template-columns:1fr auto auto 1fr;gap:10px;align-items:center;font-size:13px}
 .round .r{text-align:right}
+.round.head{font-family:var(--f-display);font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding-bottom:2px}
+.round .vs{grid-column:2 / span 2;text-align:center;color:var(--mute)}
 .die{width:28px;height:28px;border-radius:5px;display:grid;place-items:center;font-family:var(--f-mono);font-weight:500;color:#111;background:var(--dc)}
 .die.lose{opacity:.35}
 .setup-row{display:grid;grid-template-columns:14px 1fr 130px;gap:8px;align-items:center}
@@ -171,14 +176,14 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
   .pl .nm em,.pl .stats i,.pl .stats .x{display:none}
   .pl .stats{gap:8px}
   .netbar{font-size:12.5px;padding:4px 4px 4px 10px}
+  .netbar > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .brand{font-size:17px}
   .brand small{display:none}
 }
 
 /* Portrait phones and tablets: header + strip, board, thumb-zone dock, bottom-sheet drawer */
 @media (max-width:900px) and (orientation:portrait), (max-width:900px) and (min-height:501px){
-  body{padding-left:max(10px, env(safe-area-inset-left));padding-right:max(10px, env(safe-area-inset-right))}
-  body.peek{--peek:74px}
+  body{padding-left:max(10px, env(safe-area-inset-left));padding-right:max(10px, env(safe-area-inset-right));--peek:58px}
   .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;gap:8px;
     padding-top:max(8px, env(safe-area-inset-top));
     padding-bottom:calc(var(--handle) + var(--peek) + env(safe-area-inset-bottom, 0px) + 8px)}
@@ -186,10 +191,11 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
   .panel-head{grid-row:1;padding:0;border:0}
   #strip{grid-row:2}
   .boardwrap{grid-row:3}
-  #dock{grid-row:4;max-height:42vh;max-height:42dvh;overflow-y:auto;overscroll-behavior:contain;padding:10px;gap:8px}
-  #dock .hint{font-size:13px}
-  #dock .actions{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
-  #dock .actions .btn{padding:6px;font-size:13px;line-height:1.2}
+  /* fixed height: phase line, up to three lines of hint, one row of actions. The board above never resizes during play */
+  #dock{grid-row:4;height:162px;overflow:hidden;padding:10px;gap:8px}
+  #dock .hint{font-size:13px;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+  #dock .actions{margin-top:auto}
+  .drawer:not(.open) #handlabel{display:none}   /* the closed sheet shows the tops of the cards themselves */
   .drawer{position:fixed;left:0;right:0;bottom:0;z-index:5;gap:0;max-height:70vh;max-height:70dvh;
     background:var(--panel);border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.45);
     transform:translateY(calc(100% - var(--handle) - var(--peek) - env(safe-area-inset-bottom, 0px)));transition:transform .22s ease}
@@ -203,6 +209,12 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
   .drawer.open .drawerbar:not(:empty){display:flex;flex-direction:column;gap:8px;background:var(--panel-2);border-radius:4px;padding:10px}
   .hand{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
   .toast{bottom:calc(var(--handle) + var(--peek) + env(safe-area-inset-bottom, 0px) + 14px)}
+}
+/* Short portrait screens (iPhone SE, Safari with its bars showing): the board gets the room; cards stay one tap away in the sheet */
+@media (max-width:900px) and (orientation:portrait) and (max-height:700px){
+  body{--peek:0px}
+  #dock{height:140px}
+  #dock .hint{-webkit-line-clamp:2}
 }
 
 /* Landscape phones: board fits the height, the console panel scrolls on its own */
@@ -243,7 +255,7 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
             <li>Troops never enter a home station, including their own.</li>
             <li>Moving onto rivals starts a battle: each side rolls one die, high roll wins, defender wins ties. The loser removes one troop. Repeat until one side is gone.</li>
             <li>Build an outpost on a planet where you have 3+ troops for 3 ore. Only one outpost per commander per planet; rivals can share planets.</li>
-            <li>End of turn: get 1 troop plus 1 per outpost. You may recycle one card.</li>
+            <li>End of turn: get 1 troop plus 1 per outpost. You may swap one card for a new one: tap it, then Swap card.</li>
           </ul></details>
         </div>
       </div>
@@ -353,6 +365,7 @@ const shuffle = a => { for (let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j
 const P = (i = S.cur) => S.players[i];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pname = i => `<b style="color:${S.players[i].color}">${esc(S.players[i].name)}</b>`;
+const sv = (i, verb, base = verb.replace(/s$/, '')) => S.players[i].name === 'You' ? base : verb;   // "You move", "Orin moves"
 
 function makeState(cfg){
   const np = cfg.length;
@@ -387,7 +400,7 @@ function newGame(cfg){
   });
   const rolls = S.players.map(() => d6() + Math.random()/10);
   S.cur = rolls.indexOf(Math.max(...rolls));
-  log(`${pname(S.cur)} wins the opening roll and goes first.`);
+  log(`${pname(S.cur)} ${sv(S.cur,'wins')} the opening roll and ${sv(S.cur,'goes','go')} first.`);
   startTurn();
 }
 
@@ -421,7 +434,7 @@ function mine(l, kind){
   const p = P();
   if (!minable(S.cur).includes(l) || S.bank[kind] <= 0) return;
   S.bank[kind]--; p[kind]++; S.mined.push(l);
-  log(`${pname(S.cur)} mines ${kind === 'gems' ? 'a crystal' : 'ore'} on ${LOCS[l].name}.`);
+  log(`${pname(S.cur)} ${sv(S.cur,'mines')} ${kind === 'gems' ? 'a crystal' : 'ore'} on ${LOCS[l].name}.`);
   if (!minable(S.cur).length) S.phase = 'main';
 }
 
@@ -430,7 +443,7 @@ function buyTroop(){
   if (p.gems < 1 || p.supply < 1) return false;
   ensureMain();
   p.gems--; S.bank.gems++; p.supply--; S.u[p.home].n++; S.u[p.home].o = S.cur;
-  log(`${pname(S.cur)} recruits a troop.`);
+  log(`${pname(S.cur)} ${sv(S.cur,'recruits')} a troop.`);
   return true;
 }
 function tradeCards(i, j){
@@ -440,7 +453,7 @@ function tradeCards(i, j){
   const [a,b] = [i,j].sort((x,y)=>y-x);
   S.discard.push(p.hand[a], p.hand[b]); p.hand.splice(a,1); p.hand.splice(b,1);
   p.supply--; S.u[p.home].n++;
-  log(`${pname(S.cur)} trades two cards for a troop.`);
+  log(`${pname(S.cur)} ${sv(S.cur,'trades')} two cards for a troop.`);
 }
 
 function buildCost(){ return Math.max(0, BUILD_COST - (S.fx.discount || 0)); }
@@ -454,10 +467,10 @@ function build(l){
   const p = P(), c = buildCost();
   p.ore -= c; S.bank.ore += c; p.basesLeft--; S.bases[l].push(S.cur);
   S.fx.discount = 0;
-  log(`${pname(S.cur)} builds an outpost on ${LOCS[l].name}.`);
+  log(`${pname(S.cur)} ${sv(S.cur,'builds')} an outpost on ${LOCS[l].name}.`);
   if (basesOf(S.cur) >= S.target){
     S.winner = S.cur; S.phase = 'over';
-    log(`${pname(S.cur)} holds ${S.target} outposts and wins the sector.`);
+    log(`${pname(S.cur)} ${sv(S.cur,'holds')} ${S.target} outposts and ${sv(S.cur,'wins')} the sector.`);
     aiToken++;
   }
 }
@@ -473,6 +486,13 @@ function dests(src, pid=S.cur){
   return res;
 }
 
+const locName = l => LOCS[l].home >= 0 ? 'Home' : LOCS[l].name;
+// quick troop counts for a move: every count up to 5, otherwise a spread that always ends with "all"
+function countChoices(n){
+  const c = n <= 5 ? [...Array(n)].map((_,i) => i + 1) : [1, 2, Math.floor(n/2), n - 1, n];
+  return [...new Set(c)].filter(k => k >= 1).sort((a,b) => a - b);
+}
+
 function doMove(from, to, k, warp, withDrone){
   const pid = S.cur, p = P();
   ensureMain();
@@ -482,7 +502,7 @@ function doMove(from, to, k, warp, withDrone){
   let drone = false;
   if (S.drone[from] === pid && (withDrone || S.u[from].n === 0)){ drone = true; S.drone[from] = -1; }
   if (S.u[from].n === 0 && LOCS[from].home < 0) S.u[from].o = -1;
-  log(`${pname(pid)} moves ${k} troop${k>1?'s':''} ${LOCS[from].name} → ${LOCS[to].name}${warp ? ' by warp gate' : ''}.`);
+  log(`${pname(pid)} ${sv(pid,'moves')} ${k} troop${k>1?'s':''} ${LOCS[from].name} → ${LOCS[to].name}${warp ? ' by warp gate' : ''}.`);
   const dst = S.u[to];
   if (dst.n > 0 && dst.o !== pid){
     S.battle = {...battle(pid, k, drone, to), seq: ++S.battleSeq};
@@ -494,6 +514,7 @@ function doMove(from, to, k, warp, withDrone){
 
 function battle(att, k, attDrone, l){
   const def = S.u[l].o; let m = S.u[l].n;
+  const ka = k, kd = m;
   let defDrone = S.drone[l] === def;
   const rounds = [];
   const tie = S.fx.plan;
@@ -516,14 +537,14 @@ function battle(att, k, attDrone, l){
   const winner = k > 0 ? att : def;
   if (winner === att){ S.u[l] = {o:att, n:k}; if (attDrone) S.drone[l] = att; }
   else { S.u[l].n = m; }
-  log(`Battle at ${LOCS[l].name}: ${pname(winner)} holds the planet (losses ${lostAtt}–${lostDef}).`);
-  return {att, def, l, rounds, winner, lostAtt, lostDef, tie};
+  log(`Battle at ${LOCS[l].name}: ${pname(winner)} ${sv(winner,'holds')} the planet (losses ${lostAtt}–${lostDef}).`);
+  return {att, def, l, rounds, winner, lostAtt, lostDef, tie, ka, kd};
 }
 
 function reinforce(){
   const p = P(), n = Math.min(1 + basesOf(S.cur), p.supply);
   p.supply -= n; S.u[p.home].n += n; S.u[p.home].o = S.cur;
-  log(`${pname(S.cur)} receives ${n} troop${n===1?'':'s'} at home.`);
+  log(`${pname(S.cur)} ${sv(S.cur,'receives')} ${n} troop${n===1?'':'s'} at home.`);
 }
 function endTurn(recycleIdx){
   if (S.phase === 'over') return;
@@ -531,7 +552,7 @@ function endTurn(recycleIdx){
   reinforce();
   if (recycleIdx != null && p.hand[recycleIdx]){
     S.discard.push(p.hand.splice(recycleIdx,1)[0]); p.hand.push(draw());
-    log(`${pname(S.cur)} recycles a card.`);
+    log(`${pname(S.cur)} ${sv(S.cur,'recycles')} a card.`);
   }
   S.cur = (S.cur + 1) % S.players.length;
   if (S.cur === 0) S.turn++;
@@ -576,7 +597,7 @@ function playCard(idx, target){
   p.ore -= c.cost.ore; S.bank.ore += c.cost.ore;
   S.u[p.home].n -= c.cost.troop; p.supply += c.cost.troop;
   p.hand.splice(idx,1); S.discard.push(key);
-  let msg = `${pname(pid)} plays ${c.name}`;
+  let msg = `${pname(pid)} ${sv(pid,'plays')} ${c.name}`;
   switch (e.op){
     case 'drone': S.drone[target] = pid; S.dronesLeft--; msg += ` on ${LOCS[target].name}`; break;
     case 'shield': S.shield[target] = pid; S.fieldsLeft--; msg += ` on ${LOCS[target].name}`; break;
@@ -1096,7 +1117,10 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
 let shownBattle = 0, shownWin = null;
 function render(){
   if (!S) return;
-  if (ui.forCur !== S.cur || ui.forGame !== S.gameId){ ui = {sel:null, pm:null, mode:null, confirm:null, forCur:S.cur, forGame:S.gameId}; DRAWER.user = false; }
+  if (ui.forCur !== S.cur || ui.forGame !== S.gameId){
+    ui = {sel:null, pm:null, mode:null, confirm:null, forCur:S.cur, forGame:S.gameId}; DRAWER.user = false;
+    if (isMyTurn() && S.u[P().home].n > 0) ui.sel = P().home;   // most moves start from home, so it starts selected
+  }
   if (ui.pm && !own(ui.pm.from)) ui.pm = null;
   if (ui.mode?.key && P().hand[ui.mode.idx] !== ui.mode.key) ui.mode = null;
   renderBoard(); renderSide();
@@ -1126,7 +1150,7 @@ function reactiveModals(){
     shownWin = S.gameId;
     const p = S.players[S.winner];
     NET.modal = 'win';
-    openModal(`<h2 style="color:${p.color}">${esc(p.name)} takes the sector</h2><p class="hint">${S.target} outposts built in ${S.turn} rounds.${NET.role === 'client' ? ' The host can start another game.' : ''}</p><div class="row">${NET.role === 'client' ? '' : '<button class="btn primary" data-act="setup">New game</button>'}<button class="btn" data-act="close">View board</button></div>`);
+    openModal(`<h2 style="color:${p.color}">${esc(p.name)} ${sv(S.winner,'takes')} the sector</h2><p class="hint">${S.target} outposts built in ${S.turn} rounds.${NET.role === 'client' ? ' The host can start another game.' : ''}</p><div class="row">${NET.role === 'client' ? '' : '<button class="btn primary" data-act="setup">New game</button>'}<button class="btn" data-act="close">View board</button></div>`);
   }
 }
 
@@ -1172,18 +1196,15 @@ function clearTurnAlert(){
 // ---------- Drawer (portrait: cards, log and rules live in a bottom sheet) ----------
 const sheetMQ = matchMedia('(max-width:900px) and (orientation:portrait), (max-width:900px) and (min-height:501px)');   // keep in sync with the CSS
 const DRAWER = {user:false, drag:null, dragged:false};
-const drawerForced = () => isMyTurn() && (ui.mode?.type === 'trade' || ui.mode?.type === 'recycle');   // these need card taps
 function syncDrawer(){
+  // the closed sheet always shows the tops of your cards, so opening or closing it never resizes the board
   const d = $('drawer'), sheet = sheetMQ.matches;
-  const open = sheet && !d.hidden && (drawerForced() || DRAWER.user);
-  const peek = sheet && !d.hidden && !open && isMyTurn() && !pendingHandoff() && !ui.pm && !ui.mode && !ui.confirm && P().hand.length > 0;
+  const open = sheet && !d.hidden && DRAWER.user;
   d.classList.toggle('open', open);
-  document.body.classList.toggle('peek', peek);
+  document.body.classList.toggle('peek', sheet && !d.hidden && !open && isMyTurn() && !pendingHandoff());   // highlights the handle on your turn
   $('drawerhandle').setAttribute('aria-expanded', String(open));
-  $('drawerbody').inert = sheet && !open && !peek;
 }
 function setDrawer(open){
-  if (!open && drawerForced()) ui.mode = null;   // closing the sheet backs out of trade / recycle
   DRAWER.user = open;
   render();
 }
@@ -1330,60 +1351,57 @@ function renderSide(){
   st += `</div></section>`;
   setHTML($('strip'), st);
 
-  // dock: phase, hint and the actions for the current step
-  let h = confirmHTML();
-  const phaseName = S.phase === 'mine' ? 'Mining' : S.phase === 'over' ? 'Game over' : ui.mode?.type === 'recycle' ? 'End of turn' : 'Command';
-  h += `<div class="phase"><span style="color:${p.color}">${esc(p.name)} · ${phaseName}</span><span class="moves">${S.phase==='over'?'':`${S.movesLeft} move${S.movesLeft===1?'':'s'} left`}</span></div>`;
+  // dock: the same three parts at every step (phase line, hint, one row of actions), so on phones it never changes height
+  let hint = '', acts = '';
+  const x = '<button class="btn" data-act="cancel" aria-label="Cancel">✕</button>';
   if (S.phase === 'over'){
-    h += `<p class="hint">${pname(S.winner)} built ${S.target} outposts and won.</p>${NET.role === 'client' ? '<p class="hint">Waiting for the host to start another game.</p>' : '<div class="row"><button class="btn primary" data-act="setup">New game</button></div>'}`;
+    hint = `${pname(S.winner)} built ${S.target} outposts and won.${NET.role === 'client' ? ' Waiting for the host to start another game.' : ''}`;
+    if (NET.role !== 'client') acts = '<button class="btn primary" data-act="setup">New game</button>';
   } else if (!human){
-    h += `<p class="hint">${p.ai ? `${esc(p.name)} is planning their turn…` : `Waiting for ${esc(p.name)} to play.`}</p>`;
-  } else if (ui.mode?.type === 'trade'){
-    h += `<p class="hint">Pick 2 cards to trade for 1 troop at home (${ui.mode.picks.length}/2).</p><div class="row"><button class="btn" data-act="cancel">Cancel</button></div>`;
-  } else if (ui.mode?.type === 'confirm'){
-    const c = CARDS[ui.mode.key];
-    h += `<p class="hint"><b>${c.name}</b> · ${c.costLabel}. ${c.text}</p><div class="row"><button class="btn primary" data-act="playcard">Play ${c.name}</button><button class="btn" data-act="cancel">Cancel</button></div>`;
-  } else if (ui.mode?.type === 'card'){
-    const c = CARDS[ui.mode.key];
-    if (c.target === 'opp'){
-      h += `<p class="hint">${c.name}: choose a rival.</p><div class="row">${S.players.map((q,i)=> { const r = sabRes(c.effect), v = q[RES[r]]; return i===S.cur?'':`<button class="btn" data-opp="${i}" ${v?'':'disabled'} style="border-color:${q.color}">${esc(q.name)} · ${v} ${r}</button>`; }).join('')}<button class="btn" data-act="cancel">Cancel</button></div>`;
+    hint = p.ai ? `${esc(p.name)} is planning their turn…` : `Waiting for ${esc(p.name)} to play.`;
+  } else if (ui.mode){
+    const c = CARDS[ui.mode.key], blk = cardBlock(ui.mode.key);
+    const swap = '<button class="btn" data-act="swap">Swap card, end turn</button>';
+    if (ui.mode.type === 'card' && c.target === 'opp'){
+      hint = `<b>${c.name}</b>: choose a rival.`;
+      acts = S.players.map((q,i) => { const r = sabRes(c.effect), v = q[RES[r]]; return i === S.cur ? '' : `<button class="btn" data-opp="${i}" ${v?'':'disabled'} style="border-color:${q.color}">${esc(q.name)} · ${v} ${r}</button>`; }).join('') + x;
+    } else if (ui.mode.type === 'card'){
+      hint = `<b>${c.name}</b> · ${c.costLabel}. Tap a planet ringed in red.`;
+      acts = swap + x;
     } else {
-      h += `<p class="hint">${c.name}: tap a planet ringed in red.</p><div class="row"><button class="btn" data-act="cancel">Cancel</button></div>`;
+      hint = blk ? `<b>${c.name}</b>: ${blk.toLowerCase()}. You can swap it for a new card as you end your turn.` : `<b>${c.name}</b> · ${c.costLabel}. ${c.text}`;
+      acts = `<button class="btn primary" data-act="playcard" ${blk?'disabled':''}>Play</button>` + swap + x;
     }
-  } else if (ui.mode?.type === 'recycle'){
-    const n = Math.min(1+basesOf(S.cur), p.supply);
-    h += `<p class="hint">You get ${n} troop${n===1?'':'s'} at home. You may discard one card and draw a new one.</p><div class="row"><button class="btn primary" data-act="endnow">Keep hand, end turn</button><button class="btn" data-act="cancel">Back</button></div>`;
   } else if (ui.pm){
-    const {from,to,warp,k} = ui.pm, max = S.u[from].n;
-    const hasDrone = S.drone[from] === S.cur;
-    h += `<p class="hint">Move from <b>${LOCS[from].name}</b> to <b>${LOCS[to].name}</b>${warp?' through the warp gate (1 crystal)':''}.${S.u[to].n>0&&S.u[to].o!==S.cur?` <span class="err">This starts a battle with ${S.u[to].n} defender${S.u[to].n>1?'s':''}.</span>`:''}</p>
-      <div class="stepper"><button class="btn" data-act="km" aria-label="One fewer troop">−</button><output>${k}</output><button class="btn" data-act="kp" aria-label="One more troop">+</button><span class="hint">of ${max}</span></div>
-      ${hasDrone && k < max ? `<label class="toggle"><span>Drone travels with this crew</span><input type="checkbox" role="switch" id="dronechk" ${ui.pm.drone?'checked':''}><span class="knob"></span></label>`:''}
-      <div class="row"><button class="btn primary" data-act="go">Move ${k}</button><button class="btn" data-act="cancel">Cancel</button></div>`;
+    const {from, to, warp} = ui.pm, n = S.u[from].n, du = S.u[to];
+    hint = `<b>${locName(from)} → ${LOCS[to].name}</b>${warp ? ' by warp gate (1 crystal)' : ''}. `
+      + (du.n > 0 && du.o !== S.cur ? `<span class="err">Battle with ${plural(du.n, 'defender')}.</span> ` : '')
+      + `How many troops? Tap ${LOCS[to].name} again to send all.`
+      + (S.drone[from] === S.cur ? ` <button class="chip" data-act="drone">Drone ${ui.pm.drone ? 'goes' : 'stays'}</button>` : '');
+    acts = countChoices(n).map(k => `<button class="btn${k === n ? ' primary' : ''}" data-count="${k}">${k === n ? `All ${n}` : k}</button>`).join('') + x;
   } else {
-    if (S.phase === 'mine') h += `<p class="hint">Mine first: each planet where you have 2+ troops yields 1 crystal or 1 ore. Any other action ends mining.</p>`;
-    const l = ui.sel;
-    if (l != null){
+    const l = ui.sel, ml = minable(S.cur);
+    if (ml.length) hint = `Mine ${plural(ml.length, 'planet')}: each gives 1 crystal or 1 ore. Moving or recruiting ends mining.`;
+    else if (l != null){
       const L = LOCS[l], u = S.u[l];
-      h += `<div><b>${L.home>=0?'Home Station':L.name}</b> <span class="hint">· ${u.n>0?`${u.n} ${esc(S.players[u.o].name)} troop${u.n>1?'s':''}`:'empty'}${S.bases[l].length?` · outposts: ${S.bases[l].map(b=>esc(S.players[b].name)).join(', ')}`:''}${S.shield[l]>=0?' · shielded':''}${S.drone[l]>=0?' · drone':''}</span></div>`;
-      const row = [];
-      if (minable(S.cur).includes(l)) row.push(`<button class="btn primary" data-mine="gems" ${S.bank.gems?'':'disabled'}>Mine crystal</button><button class="btn primary" data-mine="ore" ${S.bank.ore?'':'disabled'}>Mine ore</button>`);
-      if (L.home < 0 && own(l) && !hasBase(l)) row.push(`<button class="btn" data-act="build" ${canBuild(l)?'':'disabled'}>Build outpost (${buildCost()} ore)</button>`);
-      if (row.length) h += `<div class="row">${row.join('')}</div>`;
-      if (own(l) && dests(l).length) h += `<p class="hint">Tap a ringed planet to move troops. Violet rings use the warp gate.</p>`;
-      else if (own(l) && S.movesLeft <= 0) h += `<p class="hint">No movements left this turn.</p>`;
-    } else {
-      h += `<p class="hint">${NET.mode==='net' ? 'Your turn. ' : ''}Select a planet or your home station.</p>`;
-    }
-    h += `<div class="row actions">
-      ${S.phase==='mine'?'<button class="btn" data-act="donemine">Done mining</button>':''}
-      <button class="btn" data-act="buy" ${p.gems>=1&&p.supply>=1?'':'disabled'}>Recruit troop (1 crystal)</button>
-      <button class="btn" data-act="trade" ${p.hand.length>=2&&p.supply>=1?'':'disabled'}>Trade 2 cards → troop</button>
-      <button class="btn primary" data-act="end">End turn</button></div>`;
+      hint = `<b>${L.home >= 0 ? 'Home Station' : L.name}</b> · ${u.n > 0 ? `${plural(u.n, 'troop')} (${esc(S.players[u.o].name)})` : 'empty'}`
+        + `${S.bases[l].length ? ` · outposts: ${S.bases[l].map(b => esc(S.players[b].name)).join(', ')}` : ''}${S.shield[l] >= 0 ? ' · shielded' : ''}${S.drone[l] >= 0 ? ' · drone' : ''}`
+        + (own(l) && dests(l).length ? '. Tap a ringed planet to move; violet rings use the warp gate.' : own(l) && S.movesLeft <= 0 ? '. No moves left this turn.' : '.');
+    } else hint = `${NET.mode === 'net' ? 'Your turn. ' : ''}Tap one of your planets to move troops.`;
+    if (ml.length) acts += `<button class="btn primary" data-mine="gems" ${S.bank.gems?'':'disabled'}>Mine ◆ crystal</button><button class="btn primary" data-mine="ore" ${S.bank.ore?'':'disabled'}>Mine ▲ ore</button>`;
+    const bl = l != null && canBuild(l) ? l : LOCS.findIndex((_,i) => canBuild(i));
+    if (bl >= 0) acts += `<button class="btn primary" data-build="${bl}" aria-label="Build an outpost on ${LOCS[bl].name} for ${buildCost()} ore">Build ${LOCS[bl].name} ▲${buildCost()}</button>`;
+    acts += `<button class="btn" data-act="buy" aria-label="Recruit a troop for 1 crystal" ${p.gems>=1&&p.supply>=1?'':'disabled'}>Recruit ◆1</button>`;
+    if (!ml.length) acts += `<button class="btn" data-act="trade" ${p.hand.length>=2&&p.supply>=1?'':'disabled'}>Trade cards → troop</button>`;
+    acts += `<button class="btn${ml.length || bl >= 0 ? '' : ' primary'}" data-act="end">End turn</button>`;
   }
+  const phaseName = S.phase === 'mine' ? 'Mining' : S.phase === 'over' ? 'Game over' : 'Command';
+  const h = ui.confirm ? confirmHTML()
+    : `<div class="phase"><span style="color:${p.color}">${esc(p.name)} · ${phaseName}</span><span class="moves">${S.phase==='over'?'':`${S.movesLeft} move${S.movesLeft===1?'':'s'} left`}</span></div>
+      <p class="hint">${hint}</p><div class="row actions">${acts}</div>`;
   setHTML($('dock'), h);
-  // while the sheet covers the dock, steps that need card taps repeat their prompt at the top of the sheet
-  setHTML($('drawerbar'), human && ['trade','recycle','confirm'].includes(ui.mode?.type) ? h : '');
+  // a card picked from the open sheet repeats its prompt at the top of the sheet, which covers the dock
+  setHTML($('drawerbar'), human && DRAWER.user && ui.mode?.type === 'confirm' ? h : '');
 
   // hand
   const viewer = NET.mode === 'net' ? meIdx : !p.ai ? S.cur : hotSeat() ? handoff.seen : S.players.findIndex(q => !q.ai);
@@ -1396,11 +1414,8 @@ function renderSide(){
     else if (viewer === S.cur && pend) hh = vp.hand.map(() => `<div class="card back" aria-hidden="true">Starhold</div>`).join('');
     else vp.hand.forEach((k,i) => {
       let en = false;
-      if (mine && !ui.pm){
-        if (ui.mode?.type === 'trade' || ui.mode?.type === 'recycle') en = true;
-        else if (!ui.mode || ui.mode.type === 'confirm') en = !cardBlock(k);
-      }
-      const picked = (ui.mode?.type === 'trade' && ui.mode.picks.includes(i)) || (ui.mode?.idx === i && ui.mode?.key === k);
+      if (mine) en = true;
+      const picked = ui.mode?.idx === i && ui.mode?.key === k;
       hh += cardHTML(k, i, en, mine && picked);
     });
   }
@@ -1433,15 +1448,18 @@ function openInfo(title, body, backTab, code){
 }
 function showBattle(res){
   NET.modal = 'battle';
-  const A = S.players[res.att], D = S.players[res.def];
-  const rows = res.rounds.map(r => `<div class="round"><span class="r">${r.attWins?'':`${esc(A.name)} loses ${r.lost==='drone'?'drone':'1'}`}</span>
+  const A = S.players[res.att], D = S.players[res.def], W = S.players[res.winner], took = res.winner === res.att, where = LOCS[res.l].name;
+  const side = (lost, r) => lost ? `${r.lost === 'drone' ? 'drone lost' : '−1 troop'}${r.a === r.d ? ' · tie' : ''}` : '';
+  const rows = res.rounds.map(r => `<div class="round"><span class="r">${side(!r.attWins, r)}</span>
     <span class="die ${r.attWins?'':'lose'}" style="--dc:${A.color}">${r.a}</span><span class="die ${r.attWins?'lose':''}" style="--dc:${D.color}">${r.d}</span>
-    <span>${r.attWins?`${esc(D.name)} loses ${r.lost==='drone'?'drone':'1'}`:''}</span></div>`).join('');
-  const W = S.players[res.winner];
-  openModal(`<h2>Battle at ${LOCS[res.l].name}</h2>
-    <p class="hint"><b style="color:${A.color}">${esc(A.name)}</b> attacks · <b style="color:${D.color}">${esc(D.name)}</b> defends${res.tie?' · attacker wins ties (Battle Plan)':' · defender wins ties'}</p>
-    <div class="rounds">${rows}</div>
-    <p><b style="color:${W.color}">${esc(W.name)}</b> holds ${LOCS[res.l].name}. Losses: ${esc(A.name)} ${res.lostAtt}, ${esc(D.name)} ${res.lostDef}.</p>
+    <span>${side(r.attWins, r)}</span></div>`).join('');
+  const ties = res.rounds.some(r => r.a === r.d);
+  const size = n => n != null ? ` with ${n}` : '';
+  openModal(`<h2 style="color:${W.color}">${esc(W.name)} ${sv(res.winner, took ? 'takes' : 'holds')} ${where}</h2>
+    <p class="hint">Battle at ${where}: <b style="color:${A.color}">${esc(A.name)}</b> attacked${size(res.ka)} · <b style="color:${D.color}">${esc(D.name)}</b> defended${size(res.kd)}</p>
+    <div class="rounds"><div class="round head"><span class="r" style="color:${A.color}">${esc(A.name)}</span><span class="vs">vs</span><span style="color:${D.color}">${esc(D.name)}</span></div>${rows}</div>
+    <p>Losses: <b style="color:${A.color}">${esc(A.name)}</b> ${res.lostAtt} · <b style="color:${D.color}">${esc(D.name)}</b> ${res.lostDef}</p>
+    ${ties ? `<p class="hint">${res.tie ? 'Battle Plan: ties went to the attacker.' : 'Ties go to the defender.'}</p>` : ''}
     <div class="row"><button class="btn primary" data-act="close">Continue</button></div>`);
 }
 
@@ -1522,7 +1540,7 @@ function renderLobbyModal(){
 // ---------- Input ----------
 svg.addEventListener('click', e => {
   if (!S || !$('modal').hidden) return;
-  if (DRAWER.user && sheetMQ.matches && !drawerForced()){ setDrawer(false); return; }   // first tap on the board dismisses the sheet
+  if (DRAWER.user && sheetMQ.matches){ setDrawer(false); return; }   // first tap on the board dismisses the sheet
   if (!isMyTurn()) return;
   const g = e.target.closest('[data-loc]');
   if (!g){   // empty space clears the selection
@@ -1534,14 +1552,31 @@ svg.addEventListener('click', e => {
     if (cardTargets(ui.mode.key).includes(l)){ const m = ui.mode; ui.mode = null; act('card', m.idx, l); }
     render(); return;
   }
-  if (ui.mode || ui.pm) return;
+  ui.mode = null;   // a board tap backs out of a card prompt
+  if (ui.pm){
+    if (l === ui.pm.to){ moveNow(S.u[ui.pm.from].n); return; }   // second tap on the destination sends everyone
+    const d = dests(ui.pm.from).find(x => x.to === l);
+    if (d){ ui.pm = {...ui.pm, to:l, warp:d.warp}; render(); return; }
+    ui.pm = null;
+  }
   if (ui.sel != null){
     const d = dests(ui.sel).find(x => x.to === l);
-    if (d){ ui.pm = {from:ui.sel, to:l, warp:d.warp, k:S.u[ui.sel].n, drone:true}; render(); return; }
+    if (d){
+      ui.pm = {from:ui.sel, to:l, warp:d.warp, drone:true};
+      const u = S.u[l];
+      if (S.u[ui.sel].n === 1 && !(u.n > 0 && u.o !== S.cur)){ moveNow(1); return; }   // one troop, no battle: nothing to ask
+      render(); return;
+    }
   }
   ui.sel = ui.sel === l ? null : l;
   render();
 });
+
+function moveNow(k){
+  const pm = ui.pm; ui.pm = null; ui.sel = pm.to;
+  act('move', pm.from, pm.to, k, pm.warp, pm.drone);
+  render();
+}
 
 // drawer handle: tap toggles, a vertical drag opens or closes
 const drawerHandle = $('drawerhandle');
@@ -1561,7 +1596,7 @@ drawerHandle.addEventListener('pointermove', e => {
 
 $('modal').addEventListener('click', e => {
   // backdrop tap dismisses read-only dialogs; anything with a decision in it needs a button
-  if (e.target === e.currentTarget && (NET.modal === 'info' || NET.modal === 'win')) closeModal();
+  if (e.target === e.currentTarget && (NET.modal === 'info' || NET.modal === 'win' || NET.modal === 'battle')) closeModal();
 });
 
 function startNewLocal(cfg){
@@ -1636,47 +1671,31 @@ document.addEventListener('click', e => {
     }
   }
   if (!S || !isMyTurn()) return;
-  if (t.dataset.mine){ act('mine', ui.sel, t.dataset.mine); return; }
+  if (t.dataset.mine){ const l = minable(S.cur)[0]; if (l != null) act('mine', l, t.dataset.mine); return; }
+  if (t.dataset.build){ act('build', +t.dataset.build); return; }
+  if (t.dataset.count){ if (ui.pm) moveNow(+t.dataset.count); return; }
   if (t.dataset.opp){ const m = ui.mode; ui.mode = null; act('card', m.idx, +t.dataset.opp); render(); return; }
   if (t.dataset.card != null){
-    const i = +t.dataset.card, key = P().hand[i];
-    if (ui.mode?.type === 'trade'){
-      const pk = ui.mode.picks; const at = pk.indexOf(i);
-      at >= 0 ? pk.splice(at,1) : pk.push(i);
-      if (pk.length === 2){ ui.mode = null; act('trade', pk[0], pk[1]); }
-    } else if (ui.mode?.type === 'recycle'){
-      ui.mode = null; act('end', i); return;
-    } else if (ui.mode?.type === 'confirm' && ui.mode.idx === i){
-      ui.mode = null; act('card', i, null);   // second tap on the same card plays it
-    } else if (!ui.mode || ui.mode.type === 'confirm'){
-      if (CARDS[key].target){ ui.mode = {type:'card', key, idx:i}; DRAWER.user = false; }   // targets are picked on the board or in the dock
-      else ui.mode = {type:'confirm', key, idx:i};
-    }
+    const i = +t.dataset.card, key = P().hand[i], blk = cardBlock(key);
+    ui.pm = null;
+    if (ui.mode?.type === 'confirm' && ui.mode.idx === i){
+      ui.mode = null; if (!blk) act('card', i, null);   // second tap on the same card plays it
+    } else if (CARDS[key]?.target && !blk){ ui.mode = {type:'card', key, idx:i}; DRAWER.user = false; }   // targets are picked on the board or in the dock
+    else ui.mode = {type:'confirm', key, idx:i};   // blocked cards still open, so they can be swapped
     render(); return;
   }
   switch (act_){
     case 'cancel': ui.mode = null; ui.pm = null; break;
-    case 'donemine': act('donemine'); return;
     case 'buy': act('buy'); return;
-    case 'trade': ui.mode = {type:'trade', picks:[]}; ui.sel = null; break;
-    case 'build': act('build', ui.sel); return;
-    case 'end': if (P().hand.length){ ui.mode = {type:'recycle'}; ui.sel = null; } else { act('end', null); return; } break;
-    case 'endnow': ui.mode = null; act('end', null); return;
+    case 'trade': act('trade', 0, 1); return;   // hands top out at 2 cards, so a trade is the whole hand
+    case 'end': ui.mode = null; act('end', null); return;
+    case 'swap': { const m = ui.mode; ui.mode = null; act('end', m ? m.idx : null); return; }   // discard this card, draw a new one, end the turn
     case 'playcard': { const m = ui.mode; ui.mode = null; if (m?.type === 'confirm') act('card', m.idx, null); break; }
-    case 'km': ui.pm.k = Math.max(1, ui.pm.k - 1); break;
-    case 'kp': ui.pm.k = Math.min(S.u[ui.pm.from].n, ui.pm.k + 1); break;
-    case 'go': {
-      const pm = ui.pm; ui.pm = null;
-      const chk = document.getElementById('dronechk');
-      ui.sel = pm.to;
-      act('move', pm.from, pm.to, pm.k, pm.warp, chk ? chk.checked : true);
-      break;
-    }
+    case 'drone': if (ui.pm) ui.pm.drone = !ui.pm.drone; break;
   }
   render();
 });
 document.addEventListener('change', e => {
-  if (e.target.id === 'dronechk' && ui.pm) ui.pm.drone = e.target.checked;
   if (NET.role === 'host' && NET.modal === 'lobby'){
     if (e.target.id === 'hnp'){
       const np = +e.target.value;
