@@ -249,7 +249,7 @@ svg text:not([font-weight]){paint-order:stroke;stroke:#090c18;stroke-width:4px;s
           <section><p class="label">Ship's log</p><div class="log" id="log"></div></section>
           <details class="rules"><summary>How to play</summary><ul>
             <li>Win by building <span class="tgt">4</span> outposts (5 with two players, 4 otherwise). Two-player games close Ilix and Senna; troops pass straight through them.</li>
-            <li>Start of turn: draw up to 2 cards. Then mine: each planet with 2+ of your troops yields 1 crystal or 1 ore.</li>
+            <li>Start of turn: draw up to 2 cards. Each planet with 2+ of your troops mines automatically: ore until you have 3, then crystal.</li>
             <li>Spend 1 crystal per troop. New troops arrive at your home station.</li>
             <li>You get 2 movements. A movement sends any number of troops one lane. The warp gate costs 1 crystal and jumps between any two of the four edge planets.</li>
             <li>Troops never enter a home station, including their own.</li>
@@ -418,24 +418,28 @@ function startTurn(){
   const p = P();
   while (p.hand.length < 2 && (S.deck.length || S.discard.length)) p.hand.push(draw());
   S.shield.forEach((o,l) => { if (o === S.cur){ S.shield[l] = -1; S.fieldsLeft++; } });
-  S.phase = 'mine'; S.movesLeft = 2; S.mined = []; S.fx = {plan:false, discount:0};
-  if (!minable(S.cur).length) S.phase = 'main';
+  S.phase = 'main'; S.movesLeft = 2; S.fx = {plan:false, discount:0};
+  autoMine();
   render();
   if (p.ai && isAuthority()) runAI(++aiToken);
 }
 
-function ensureMain(){ if (S.phase === 'mine') S.phase = 'main'; }
+function ensureMain(){ if (S.phase === 'mine') S.phase = 'main'; }   // games saved mid-mining by older versions
 
-function minable(pid){
-  if (S.phase !== 'mine') return [];
-  return LOCS.map((_,l)=>l).filter(l => LOCS[l].home < 0 && S.u[l].o === pid && S.u[l].n >= 2 && !S.mined.includes(l));
-}
-function mine(l, kind){
-  const p = P();
-  if (!minable(S.cur).includes(l) || S.bank[kind] <= 0) return;
-  S.bank[kind]--; p[kind]++; S.mined.push(l);
-  log(`${pname(S.cur)} ${sv(S.cur,'mines')} ${kind === 'gems' ? 'a crystal' : 'ore'} on ${LOCS[l].name}.`);
-  if (!minable(S.cur).length) S.phase = 'main';
+// Mining needs no input: at the start of your turn every planet holding 2+ of your troops yields one resource.
+// It is ore while you are short of an outpost, crystal after that; if the bank is out of one, you get the other.
+const minedText = g => [g.ore && `${g.ore} ore`, g.gems && plural(g.gems, 'crystal')].filter(Boolean).join(' and ');
+function autoMine(){
+  const p = P(), got = {gems:0, ore:0};
+  LOCS.forEach((L, l) => {
+    if (L.home >= 0 || S.u[l].o !== S.cur || S.u[l].n < 2) return;
+    let kind = p.ore < BUILD_COST && p.basesLeft > 0 ? 'ore' : 'gems';
+    if (S.bank[kind] <= 0) kind = kind === 'ore' ? 'gems' : 'ore';
+    if (S.bank[kind] <= 0) return;
+    S.bank[kind]--; p[kind]++; got[kind]++;
+  });
+  S.mined = got;
+  if (got.gems || got.ore) log(`${pname(S.cur)} ${sv(S.cur,'mines')} ${minedText(got)}.`);
 }
 
 function buyTroop(){
@@ -573,6 +577,13 @@ function cardTargets(key, pid=S.cur){
   }
   return [];
 }
+// a card with exactly one legal target (a planet, or the one rival who has the resource) needs no choosing
+function soleTarget(key){
+  const c = CARDS[key];
+  if (!c?.target) return null;
+  const t = c.target === 'opp' ? S.players.map((_,i) => i).filter(i => i !== S.cur && S.players[i][RES[sabRes(c.effect)]] > 0) : cardTargets(key);
+  return t.length === 1 ? t[0] : null;
+}
 function cardBlock(key, pid=S.cur){
   const c = CARDS[key], p = P(pid);
   if (!c) return 'Unknown';
@@ -630,7 +641,6 @@ function apply(type, a){
   const int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
   const LMAX = LOCS.length - 1;
   switch (type){
-    case 'mine': if (int(a[0],0,LMAX) && (a[1] === 'gems' || a[1] === 'ore')) mine(a[0], a[1]); break;
     case 'buy': buyTroop(); break;
     case 'trade': if (int(a[0],0,p.hand.length-1) && int(a[1],0,p.hand.length-1) && a[0] !== a[1]) tradeCards(a[0], a[1]); break;
     case 'build': if (int(a[0],0,LMAX)) build(a[0]); break;
@@ -647,7 +657,6 @@ function apply(type, a){
       if (!dests(from).some(d => d.to === to && d.warp === !!warp) || !int(k,1,S.u[from].n)) break;
       doMove(from, to, k, !!warp, !!drone); break;
     }
-    case 'donemine': ensureMain(); break;
     case 'end': endTurn(int(a[0],0,p.hand.length-1) ? a[0] : null); return;
   }
 }
@@ -750,11 +759,6 @@ async function runAI(token){
   };
   if (!await step(600)) return;
   const p = P();
-  for (const l of minable(S.cur)){
-    const kind = p.ore < 3 ? 'ore' : p.gems < 2 ? 'gems' : (p.ore < 6 ? 'ore' : 'gems');
-    mine(l, S.bank[kind] > 0 ? kind : (kind === 'ore' ? 'gems' : 'ore'));
-    if (!await step(300)) return;
-  }
   ensureMain();
   aiCards(); aiBuild();
   if (!await step()) return;
@@ -1234,7 +1238,6 @@ function renderBoard(){
   const human = isMyTurn();
   const sel = ui.sel;
   const dset = human && sel != null && !ui.mode && !ui.pm ? dests(sel) : [];
-  const mset = human ? minable(S.cur) : [];
   const tset = human && ui.mode?.type === 'card' ? cardTargets(ui.mode.key) : [];
   // on-screen sizes: names ≥11px, troop counts ≥14px
   const nf = f(Math.max(12.5, 11*k)), hf = f(Math.max(11, 11*k)), cf = f(Math.max(17, 14*k)), hcf = f(Math.max(22, 14*k)), wf = f(Math.max(12, 11*k));
@@ -1253,7 +1256,6 @@ function renderBoard(){
     if (sel === l) ring = `<circle cx="${x}" cy="${y}" r="${f((L.home>=0?44:38)*g)}" fill="none" stroke="#fff" stroke-width="2.5"/>`;
     const dd = dset.find(d => d.to === l);
     if (dd) ring += `<circle cx="${x}" cy="${y}" r="${RING}" fill="none" stroke="${dd.warp?'#b49cff':'#ffd27a'}" stroke-width="2.5" stroke-dasharray="6 5" class="pulse"/>`;
-    if (mset.includes(l)) ring += `<circle cx="${x}" cy="${y}" r="${RING}" fill="none" stroke="#ffd27a" stroke-width="2.5" class="pulse"/>`;
     if (tset.includes(l)) ring += `<circle cx="${x}" cy="${y}" r="${RING}" fill="none" stroke="#ff7a8a" stroke-width="2.5" class="pulse"/>`;
     const X = f(10*g);
     const cross = `<path d="M${x-X} ${y-X}L${x+X} ${y+X}M${x+X} ${y-X}L${x-X} ${y+X}" stroke="#3a4170" stroke-width="2"/>`;
@@ -1369,8 +1371,9 @@ function renderSide(){
       hint = `<b>${c.name}</b> · ${c.costLabel}. Tap a planet ringed in red.`;
       acts = swap + x;
     } else {
+      const t = ui.mode.target, on = t == null ? '' : ` on ${c.target === 'opp' ? esc(S.players[t].name) : LOCS[t].name}`;
       hint = blk ? `<b>${c.name}</b>: ${blk.toLowerCase()}. You can swap it for a new card as you end your turn.` : `<b>${c.name}</b> · ${c.costLabel}. ${c.text}`;
-      acts = `<button class="btn primary" data-act="playcard" ${blk?'disabled':''}>Play</button>` + swap + x;
+      acts = `<button class="btn primary" data-act="playcard" ${blk?'disabled':''}>Play${on}</button>` + swap + x;
     }
   } else if (ui.pm){
     const {from, to, warp} = ui.pm, n = S.u[from].n, du = S.u[to];
@@ -1380,22 +1383,21 @@ function renderSide(){
       + (S.drone[from] === S.cur ? ` <button class="chip" data-act="drone">Drone ${ui.pm.drone ? 'goes' : 'stays'}</button>` : '');
     acts = countChoices(n).map(k => `<button class="btn${k === n ? ' primary' : ''}" data-count="${k}">${k === n ? `All ${n}` : k}</button>`).join('') + x;
   } else {
-    const l = ui.sel, ml = minable(S.cur);
-    if (ml.length) hint = `Mine ${plural(ml.length, 'planet')}: each gives 1 crystal or 1 ore. Moving or recruiting ends mining.`;
-    else if (l != null){
+    const l = ui.sel, got = S.mined && (S.mined.gems || S.mined.ore) ? `Mined ${minedText(S.mined)}. ` : '';
+    if (l != null){
       const L = LOCS[l], u = S.u[l];
       hint = `<b>${L.home >= 0 ? 'Home Station' : L.name}</b> · ${u.n > 0 ? `${plural(u.n, 'troop')} (${esc(S.players[u.o].name)})` : 'empty'}`
         + `${S.bases[l].length ? ` · outposts: ${S.bases[l].map(b => esc(S.players[b].name)).join(', ')}` : ''}${S.shield[l] >= 0 ? ' · shielded' : ''}${S.drone[l] >= 0 ? ' · drone' : ''}`
         + (own(l) && dests(l).length ? '. Tap a ringed planet to move; violet rings use the warp gate.' : own(l) && S.movesLeft <= 0 ? '. No moves left this turn.' : '.');
     } else hint = `${NET.mode === 'net' ? 'Your turn. ' : ''}Tap one of your planets to move troops.`;
-    if (ml.length) acts += `<button class="btn primary" data-mine="gems" ${S.bank.gems?'':'disabled'}>Mine ◆ crystal</button><button class="btn primary" data-mine="ore" ${S.bank.ore?'':'disabled'}>Mine ▲ ore</button>`;
+    hint = got + hint;
     const bl = l != null && canBuild(l) ? l : LOCS.findIndex((_,i) => canBuild(i));
     if (bl >= 0) acts += `<button class="btn primary" data-build="${bl}" aria-label="Build an outpost on ${LOCS[bl].name} for ${buildCost()} ore">Build ${LOCS[bl].name} ▲${buildCost()}</button>`;
     acts += `<button class="btn" data-act="buy" aria-label="Recruit a troop for 1 crystal" ${p.gems>=1&&p.supply>=1?'':'disabled'}>Recruit ◆1</button>`;
-    if (!ml.length) acts += `<button class="btn" data-act="trade" ${p.hand.length>=2&&p.supply>=1?'':'disabled'}>Trade cards → troop</button>`;
-    acts += `<button class="btn${ml.length || bl >= 0 ? '' : ' primary'}" data-act="end">End turn</button>`;
+    acts += `<button class="btn" data-act="trade" ${p.hand.length>=2&&p.supply>=1?'':'disabled'}>Trade cards → troop</button>`;
+    acts += `<button class="btn${bl >= 0 ? '' : ' primary'}" data-act="end">End turn</button>`;
   }
-  const phaseName = S.phase === 'mine' ? 'Mining' : S.phase === 'over' ? 'Game over' : 'Command';
+  const phaseName = S.phase === 'over' ? 'Game over' : 'Command';
   const h = ui.confirm ? confirmHTML()
     : `<div class="phase"><span style="color:${p.color}">${esc(p.name)} · ${phaseName}</span><span class="moves">${S.phase==='over'?'':`${S.movesLeft} move${S.movesLeft===1?'':'s'} left`}</span></div>
       <p class="hint">${hint}</p><div class="row actions">${acts}</div>`;
@@ -1563,8 +1565,7 @@ svg.addEventListener('click', e => {
     const d = dests(ui.sel).find(x => x.to === l);
     if (d){
       ui.pm = {from:ui.sel, to:l, warp:d.warp, drone:true};
-      const u = S.u[l];
-      if (S.u[ui.sel].n === 1 && !(u.n > 0 && u.o !== S.cur)){ moveNow(1); return; }   // one troop, no battle: nothing to ask
+      if (S.u[ui.sel].n === 1){ moveNow(1); return; }   // one troop: nothing to ask
       render(); return;
     }
   }
@@ -1671,17 +1672,17 @@ document.addEventListener('click', e => {
     }
   }
   if (!S || !isMyTurn()) return;
-  if (t.dataset.mine){ const l = minable(S.cur)[0]; if (l != null) act('mine', l, t.dataset.mine); return; }
   if (t.dataset.build){ act('build', +t.dataset.build); return; }
   if (t.dataset.count){ if (ui.pm) moveNow(+t.dataset.count); return; }
   if (t.dataset.opp){ const m = ui.mode; ui.mode = null; act('card', m.idx, +t.dataset.opp); render(); return; }
   if (t.dataset.card != null){
     const i = +t.dataset.card, key = P().hand[i], blk = cardBlock(key);
     ui.pm = null;
+    const sole = blk ? null : soleTarget(key);
     if (ui.mode?.type === 'confirm' && ui.mode.idx === i){
-      ui.mode = null; if (!blk) act('card', i, null);   // second tap on the same card plays it
-    } else if (CARDS[key]?.target && !blk){ ui.mode = {type:'card', key, idx:i}; DRAWER.user = false; }   // targets are picked on the board or in the dock
-    else ui.mode = {type:'confirm', key, idx:i};   // blocked cards still open, so they can be swapped
+      const m = ui.mode; ui.mode = null; if (!blk) act('card', i, m.target ?? null);   // second tap on the same card plays it
+    } else if (CARDS[key]?.target && !blk && sole == null){ ui.mode = {type:'card', key, idx:i}; DRAWER.user = false; }   // targets are picked on the board or in the dock
+    else ui.mode = {type:'confirm', key, idx:i, target:sole};   // blocked cards still open, so they can be swapped
     render(); return;
   }
   switch (act_){
@@ -1690,7 +1691,7 @@ document.addEventListener('click', e => {
     case 'trade': act('trade', 0, 1); return;   // hands top out at 2 cards, so a trade is the whole hand
     case 'end': ui.mode = null; act('end', null); return;
     case 'swap': { const m = ui.mode; ui.mode = null; act('end', m ? m.idx : null); return; }   // discard this card, draw a new one, end the turn
-    case 'playcard': { const m = ui.mode; ui.mode = null; if (m?.type === 'confirm') act('card', m.idx, null); break; }
+    case 'playcard': { const m = ui.mode; ui.mode = null; if (m?.type === 'confirm') act('card', m.idx, m.target ?? null); break; }
     case 'drone': if (ui.pm) ui.pm.drone = !ui.pm.drone; break;
   }
   render();
